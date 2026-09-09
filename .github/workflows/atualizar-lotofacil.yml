@@ -2,30 +2,22 @@ name: Atualizar Lotofácil
 
 on:
   schedule:
-    - cron: "15 0 * * 2,3,4,5,6,0"
+    # roda seg a sáb (BRT) ~21h15 → em UTC isso cai terça a domingo às 00:15
+    - cron: '15 0 * * 0,2,3,4,5,6'
   workflow_dispatch:
     inputs:
       backfill:
-        description: "Importar todo o historico (carga inicial)"
+        description: 'Importar todos os concursos faltantes (carga inicial)'
         required: false
-        default: "false"
+        default: 'false'
 
 jobs:
-  importar:
+  atualizar:
     runs-on: ubuntu-latest
     steps:
-      - name: Chamar Edge Function de importacao
+      - name: Disparar Edge Function
         run: |
-          BACKFILL="${{ github.event.inputs.backfill || 'false' }}"
-          echo "Backfill: $BACKFILL"
-          curl -sf -X GET \
-            "${{ secrets.SUPABASE_FUNCTIONS_URL }}?backfill=$BACKFILL" \
+          curl -sf -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/importar-concursos" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            | tee resultado.json
-
-      - name: Falhar o job se a importacao deu erro
-        run: |
-          if grep -q '"error"' resultado.json; then
-            echo "Import falhou, veja o log acima"
-            exit 1
-          fi
+            -H "Content-Type: application/json" \
+            -d "{\"backfill\": ${{ github.event.inputs.backfill || 'false' }}}"
