@@ -14,9 +14,9 @@ jobs:
   atualizar:
     runs-on: ubuntu-latest
     steps:
-      - name: Disparar Edge Function
+            - name: Disparar Edge Function
         run: |
-          curl -sf -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/importar-concursos" \
+          curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/importar-concursos" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{\"backfill\": ${{ github.event.inputs.backfill || 'false' }}}"
