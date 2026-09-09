@@ -2,7 +2,6 @@ name: Atualizar Lotofácil
 
 on:
   schedule:
-    # roda seg a sáb (BRT) ~21h15 → em UTC isso cai terça a domingo às 00:15
     - cron: '15 0 * * 0,2,3,4,5,6'
   workflow_dispatch:
     inputs:
