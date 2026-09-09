@@ -1,124 +1,31 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+name: Atualizar Lotofácil
 
-const OFICIAL_BASE = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil";
-const FALLBACK_BASE = "https://loteriascaixa-api.herokuapp.com/api/lotofacil";
+on:
+  schedule:
+    - cron: "15 0 * * 2,3,4,5,6,0"
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Importar todo o historico (carga inicial)"
+        required: false
+        default: "false"
 
-interface ResultadoCaixa {
-  numero?: number;
-  concurso?: number;
-  dataApuracao?: string;
-  data?: string;
-  listaDezenas?: string[];
-  dezenas?: string[];
-  acumulado?: boolean;
-  acumulou?: boolean;
-  valorAcumuladoProximoConcurso?: number;
-}
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar Edge Function de importacao
+        run: |
+          BACKFILL="${{ github.event.inputs.backfill || 'false' }}"
+          echo "Backfill: $BACKFILL"
+          curl -sf -X GET \
+            "${{ secrets.SUPABASE_FUNCTIONS_URL }}?backfill=$BACKFILL" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            | tee resultado.json
 
-function normalizar(json: ResultadoCaixa) {
-  const concurso = json.numero ?? json.concurso;
-  const dataStr = json.dataApuracao ?? json.data ?? "";
-  const dezenasRaw = json.listaDezenas ?? json.dezenas ?? [];
-
-  const [dd, mm, yyyy] = dataStr.split("/");
-  const dataSorteio = yyyy ? `${yyyy}-${mm}-${dd}` : null;
-
-  return {
-    concurso,
-    data_sorteio: dataSorteio,
-    dezenas: dezenasRaw.map((d) => parseInt(d, 10)).sort((a, b) => a - b),
-    acumulou: json.acumulado ?? json.acumulou ?? null,
-    valor_acumulado: json.valorAcumuladoProximoConcurso ?? null,
-  };
-}
-
-async function buscarConcurso(numero?: number): Promise<ResultadoCaixa> {
-  const sufixo = numero ? `/${numero}` : "";
-  try {
-    const resp = await fetch(`${OFICIAL_BASE}${sufixo}`);
-    if (!resp.ok) throw new Error(`Caixa respondeu ${resp.status}`);
-    return await resp.json();
-  } catch (_e) {
-    const resp2 = await fetch(`${FALLBACK_BASE}${numero ? `/${numero}` : "/latest"}`);
-    if (!resp2.ok) throw new Error(`Fallback também falhou: ${resp2.status}`);
-    const j = await resp2.json();
-    return {
-      numero: j.concurso,
-      dataApuracao: j.data,
-      listaDezenas: j.dezenas,
-      acumulado: j.acumulou,
-    };
-  }
-}
-
-Deno.serve(async (req) => {
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  const url = new URL(req.url);
-  const backfill = url.searchParams.get("backfill") === "true";
-
-  try {
-    const ultimoCaixa = normalizar(await buscarConcurso());
-    if (!ultimoCaixa.concurso) {
-      return new Response(JSON.stringify({ error: "Não consegui ler o concurso mais recente" }), { status: 502 });
-    }
-
-    let numerosParaBuscar: number[] = [ultimoCaixa.concurso];
-
-    if (backfill) {
-      const { data: existentes } = await supabase.from("concursos").select("concurso");
-      const jaTemos = new Set((existentes ?? []).map((r) => r.concurso));
-
-      numerosParaBuscar = [];
-      for (let n = 1; n <= ultimoCaixa.concurso; n++) {
-        if (!jaTemos.has(n)) numerosParaBuscar.push(n);
-      }
-    }
-
-    const importados: number[] = [];
-    const falhas: number[] = [];
-
-    const TAMANHO_LOTE = 10;
-    for (let i = 0; i < numerosParaBuscar.length; i += TAMANHO_LOTE) {
-      const lote = numerosParaBuscar.slice(i, i + TAMANHO_LOTE);
-      const resultados = await Promise.all(
-        lote.map(async (n) => {
-          try {
-            if (n === ultimoCaixa.concurso) return ultimoCaixa;
-            return normalizar(await buscarConcurso(n));
-          } catch {
-            falhas.push(n);
-            return null;
-          }
-        }),
-      );
-
-      const linhas = resultados.filter((r): r is ReturnType<typeof normalizar> => r !== null && !!r.data_sorteio);
-
-      if (linhas.length > 0) {
-        const { error } = await supabase.from("concursos").upsert(linhas, { onConflict: "concurso" });
-        if (error) throw error;
-        importados.push(...linhas.map((l) => l.concurso!));
-      }
-
-      await new Promise((r) => setTimeout(r, 300));
-    }
-
-    await supabase.rpc("recalcular_ciclos");
-
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        ultimo_concurso_caixa: ultimoCaixa.concurso,
-        importados: importados.length,
-        falhas,
-      }),
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
-  }
-});
+      - name: Falhar o job se a importacao deu erro
+        run: |
+          if grep -q '"error"' resultado.json; then
+            echo "Import falhou, veja o log acima"
+            exit 1
+          fi
