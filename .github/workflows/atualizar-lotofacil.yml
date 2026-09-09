@@ -1,0 +1,33 @@
+name: Atualizar Lotofácil
+
+on:
+  schedule:
+    # Sorteios: seg/ter/qua/qui/sex/sáb ~20h (Brasília = UTC-3)
+    # Roda às 21:15 BRT = 00:15 UTC do dia seguinte, com folga pro resultado sair
+    - cron: "15 0 * * 2,3,4,5,6,0"
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Importar todo o histórico (carga inicial)"
+        required: false
+        default: "false"
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar Edge Function de importação
+        run: |
+          BACKFILL="${{ github.event.inputs.backfill || 'false' }}"
+          echo "Backfill: $BACKFILL"
+          curl -sf -X GET \
+            "${{ secrets.SUPABASE_FUNCTIONS_URL }}/importar-concursos?backfill=$BACKFILL" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            | tee resultado.json
+
+      - name: Falhar o job se a importação deu erro
+        run: |
+          if grep -q '"error"' resultado.json; then
+            echo "Import falhou, veja o log acima"
+            exit 1
+          fi
