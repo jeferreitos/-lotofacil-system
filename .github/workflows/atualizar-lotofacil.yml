@@ -14,7 +14,7 @@ jobs:
   atualizar:
     runs-on: ubuntu-latest
     steps:
-            - name: Disparar Edge Function
+      - name: Disparar Edge Function
         run: |
           curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/importar-concursos" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
