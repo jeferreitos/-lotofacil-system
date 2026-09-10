@@ -273,6 +273,22 @@ async function carregarCiclos() {
   }
   statusEl.textContent = '';
   tabelaEl.innerHTML = montarTabelaGenerica(data);
+
+  // Linha-resumo: união (sem repetir) de todas as dezenas que aparecem em
+  // "dezenas_faltando" de qualquer categoria — uma mesma dezena pode faltar
+  // em mais de uma categoria (ex: uma dezena pode ser primo E mágico ao
+  // mesmo tempo), por isso a soma direta das colunas duplicaria números.
+  const todasFaltando = new Set();
+  (data ?? []).forEach((linha) => {
+    (linha.dezenas_faltando ?? []).forEach((d) => todasFaltando.add(d));
+  });
+  const listaOrdenada = [...todasFaltando].sort((a, b) => a - b);
+
+  const resumo = document.createElement('div');
+  resumo.style.cssText = 'margin-top:12px; padding-top:12px; border-top:1px solid #eee;';
+  resumo.innerHTML = `<strong>Todas as dezenas atrasadas (sem repetir), ${listaOrdenada.length} no total:</strong><br/>
+    <div style="margin-top:6px;">${chipsDezenas(listaOrdenada)}</div>`;
+  tabelaEl.appendChild(resumo);
 }
 
 async function carregarDuracaoCiclos() {
