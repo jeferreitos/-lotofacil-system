@@ -127,6 +127,7 @@
   <button data-aba="gerar">Gerar jogos</button>
   <button data-aba="meus-jogos">Meus jogos</button>
   <button data-aba="conferencia">Conferência</button>
+  <button data-aba="analise">Análise</button>
 </nav>
 
 <main>
@@ -183,6 +184,20 @@
       <h2>Painel de conferência</h2>
       <div id="conferencia-status" class="carregando">Carregando…</div>
       <div id="conferencia-tabela"></div>
+    </div>
+  </section>
+
+  <!-- ===================== ANÁLISE ===================== -->
+  <section id="aba-analise" class="aba">
+    <div class="cartao">
+      <h2>Análise dos últimos 20 concursos</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Repetição em relação ao concurso anterior, dezenas por categoria (primos, fibonacci,
+        moldura, mágicos) e distribuição por linha do volante (L1 = 01-05, L2 = 06-10,
+        L3 = 11-15, L4 = 16-20, L5 = 21-25).
+      </p>
+      <div id="analise-status" class="carregando">Carregando…</div>
+      <div id="analise-tabela" style="overflow-x:auto;"></div>
     </div>
   </section>
 
@@ -409,12 +424,124 @@ async function carregarConferencia() {
 }
 
 // ---------------------------------------------------------------------
+// Aba Análise — últimos 20 concursos
+// ---------------------------------------------------------------------
+function chipsDezenas(lista) {
+  if (!lista || lista.length === 0) return '<span style="color:#bbb;">—</span>';
+  return lista.map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`).join(' ');
+}
+
+async function carregarAnalise() {
+  const statusEl = document.getElementById('analise-status');
+  const tabelaEl = document.getElementById('analise-tabela');
+
+  // 1) Categorias (primos, fibonacci, moldura, magicos, etc.) — tabela genérica
+  //    categoria/dezena, agrupamos num mapa categoria -> Set de dezenas.
+  const { data: categoriasRaw, error: erroCategorias } = await supabaseClient
+    .from('categorias_numeros')
+    .select('*');
+
+  if (erroCategorias) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao carregar categorias: ${erroCategorias.message}</span>`;
+    return;
+  }
+
+  const mapaCategorias = {};
+  (categoriasRaw ?? []).forEach((linha) => {
+    if (!mapaCategorias[linha.categoria]) mapaCategorias[linha.categoria] = new Set();
+    mapaCategorias[linha.categoria].add(linha.dezena);
+  });
+
+  // categorias que queremos destacar na tabela, na ordem pedida
+  const CATEGORIAS_EXIBIDAS = ['primos', 'fibonacci', 'moldura', 'magicos'];
+
+  // 2) Últimos 21 concursos (20 + 1 extra só pra calcular a repetição do
+  //    mais antigo dos 20 em relação ao concurso anterior a ele).
+  const { data: concursosDesc, error: erroConcursos } = await supabaseClient
+    .from('concursos')
+    .select('concurso, data_sorteio, dezenas')
+    .order('concurso', { ascending: false })
+    .limit(21);
+
+  if (erroConcursos) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao carregar concursos: ${erroConcursos.message}</span>`;
+    return;
+  }
+
+  if (!concursosDesc || concursosDesc.length < 2) {
+    statusEl.innerHTML = '<span class="msg-erro">Não há concursos suficientes para calcular a análise.</span>';
+    return;
+  }
+
+  // ordem crescente pra comparar cada concurso com o imediatamente anterior
+  const concursosAsc = [...concursosDesc].reverse();
+
+  const linhas = [];
+  for (let i = 1; i < concursosAsc.length; i++) {
+    const atual = concursosAsc[i];
+    const anterior = concursosAsc[i - 1];
+    const repetidas = atual.dezenas.filter((d) => anterior.dezenas.includes(d));
+
+    const porCategoria = {};
+    CATEGORIAS_EXIBIDAS.forEach((cat) => {
+      const set = mapaCategorias[cat] ?? new Set();
+      porCategoria[cat] = atual.dezenas.filter((d) => set.has(d));
+    });
+
+    const linhasVolante = [1, 2, 3, 4, 5].map(
+      (l) => atual.dezenas.filter((d) => d >= (l - 1) * 5 + 1 && d <= l * 5).length
+    );
+
+    linhas.push({ atual, repetidas, porCategoria, linhasVolante });
+  }
+
+  // mostrar do concurso mais recente pro mais antigo
+  linhas.reverse();
+
+  let html = `<table>
+    <thead>
+      <tr>
+        <th>Concurso</th>
+        <th>Data</th>
+        <th>Dezenas sorteadas</th>
+        <th>Repetidas do anterior</th>
+        <th>Primos</th>
+        <th>Fibonacci</th>
+        <th>Moldura</th>
+        <th>Mágicos</th>
+        <th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>L5</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  linhas.forEach(({ atual, repetidas, porCategoria, linhasVolante }) => {
+    html += `<tr>
+      <td>${atual.concurso}</td>
+      <td>${atual.data_sorteio ?? '—'}</td>
+      <td>${chipsDezenas(atual.dezenas)}</td>
+      <td><strong>${repetidas.length}</strong> ${chipsDezenas(repetidas)}</td>
+      <td>${chipsDezenas(porCategoria.primos)}</td>
+      <td>${chipsDezenas(porCategoria.fibonacci)}</td>
+      <td>${chipsDezenas(porCategoria.moldura)}</td>
+      <td>${chipsDezenas(porCategoria.magicos)}</td>
+      ${linhasVolante.map((qtd) => `<td>${qtd}</td>`).join('')}
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+
+  statusEl.textContent = '';
+  tabelaEl.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------
 // Carga inicial
 // ---------------------------------------------------------------------
 carregarCiclos();
 carregarDuracaoCiclos();
 carregarMeusJogos();
 carregarConferencia();
+carregarAnalise();
 </script>
 
 </body>
