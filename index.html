@@ -196,7 +196,7 @@
 const SUPABASE_URL = 'https://SEU-PROJETO.supabase.co';
 const SUPABASE_ANON_KEY = 'SUA-ANON-KEY-AQUI';
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ---------------------------------------------------------------------
 // Navegação entre abas
@@ -250,7 +250,7 @@ function badgeStatus(status) {
 async function carregarCiclos() {
   const statusEl = document.getElementById('ciclos-status');
   const tabelaEl = document.getElementById('ciclos-tabela');
-  const { data, error } = await supabase.from('dezenas_atrasadas').select('*');
+  const { data, error } = await supabaseClient.from('dezenas_atrasadas').select('*');
   if (error) {
     statusEl.textContent = 'Erro ao carregar: ' + error.message;
     statusEl.className = 'msg-erro';
@@ -263,7 +263,7 @@ async function carregarCiclos() {
 async function carregarDuracaoCiclos() {
   const statusEl = document.getElementById('duracao-status');
   const tabelaEl = document.getElementById('duracao-tabela');
-  const { data, error } = await supabase.from('duracao_media_ciclos').select('*');
+  const { data, error } = await supabaseClient.from('duracao_media_ciclos').select('*');
   if (error) {
     statusEl.textContent = 'Erro ao carregar: ' + error.message;
     statusEl.className = 'msg-erro';
@@ -286,7 +286,7 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
   statusEl.innerHTML = '<span class="carregando">Gerando…</span>';
   resultadoEl.innerHTML = '';
 
-  const { data, error } = await supabase.rpc('gerar_jogos', { p_qtd: qtd });
+  const { data, error } = await supabaseClient.rpc('gerar_jogos', { p_qtd: qtd });
 
   botao.disabled = false;
 
@@ -306,7 +306,7 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
     btn.style.margin = '4px';
     btn.addEventListener('click', async () => {
       const dezenas = jogo.dezenas ?? jogo.numeros ?? jogo.jogo;
-      const { error: erroInsert } = await supabase
+      const { error: erroInsert } = await supabaseClient
         .from('meus_jogos')
         .insert({ nome: `Gerado ${new Date().toLocaleDateString('pt-BR')} #${i + 1}`, dezenas });
       if (erroInsert) {
@@ -339,7 +339,7 @@ document.getElementById('btn-cadastrar-jogo').addEventListener('click', async ()
     return;
   }
 
-  const { error } = await supabase.from('meus_jogos').insert({ nome, dezenas });
+  const { error } = await supabaseClient.from('meus_jogos').insert({ nome, dezenas });
   if (error) {
     statusEl.innerHTML = `<span class="msg-erro">Erro: ${error.message}</span>`;
   } else {
@@ -354,7 +354,7 @@ async function carregarMeusJogos() {
   const statusEl = document.getElementById('meus-jogos-status');
   const tabelaEl = document.getElementById('meus-jogos-tabela');
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from('export_jogos_texto')
     .select('*');
 
@@ -398,7 +398,7 @@ async function carregarMeusJogos() {
 async function carregarConferencia() {
   const statusEl = document.getElementById('conferencia-status');
   const tabelaEl = document.getElementById('conferencia-tabela');
-  const { data, error } = await supabase.from('painel_conferencias').select('*');
+  const { data, error } = await supabaseClient.from('painel_conferencias').select('*');
   if (error) {
     statusEl.textContent = 'Erro ao carregar: ' + error.message;
     statusEl.className = 'msg-erro';
