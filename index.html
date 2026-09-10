@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lotofácil — Painel</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --roxo: #930089;
+    --roxo-escuro: #5c0056;
+    --cinza-claro: #f4f4f6;
+    --cinza-borda: #ddd;
+    --verde: #1a8a3a;
+    --vermelho: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--cinza-claro);
+    color: #222;
+  }
+  header {
+    background: var(--roxo);
+    color: #fff;
+    padding: 16px 20px;
+  }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; font-size: 13px; opacity: 0.85; }
+
+  nav {
+    display: flex;
+    background: var(--roxo-escuro);
+    overflow-x: auto;
+  }
+  nav button {
+    flex: 1;
+    min-width: 120px;
+    padding: 12px 8px;
+    background: none;
+    border: none;
+    color: #fff;
+    opacity: 0.75;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  nav button.ativo {
+    opacity: 1;
+    border-bottom: 3px solid #fff;
+    font-weight: bold;
+  }
+
+  main { padding: 16px; max-width: 900px; margin: 0 auto; }
+  .aba { display: none; }
+  .aba.ativa { display: block; }
+
+  .cartao {
+    background: #fff;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .cartao h2 { margin-top: 0; font-size: 16px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  th { background: #fafafa; }
+
+  button.acao {
+    background: var(--roxo);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button.acao:disabled { opacity: 0.5; cursor: default; }
+  button.secundario {
+    background: #fff;
+    color: var(--roxo);
+    border: 1px solid var(--roxo);
+  }
+
+  input[type="number"], input[type="text"] {
+    padding: 6px 8px;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .linha-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .msg-erro { color: var(--vermelho); font-size: 13px; }
+  .msg-ok { color: var(--verde); font-size: 13px; }
+  .carregando { font-size: 13px; color: #888; font-style: italic; }
+  .dezenas-chip {
+    display: inline-block;
+    background: var(--cinza-claro);
+    border: 1px solid var(--cinza-borda);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: 1px;
+    font-family: monospace;
+  }
+  .badge-status {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    color: #fff;
+  }
+  .badge-ativo { background: var(--verde); }
+  .badge-jogado { background: #666; }
+  .badge-outro { background: #999; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Lotofácil — Painel</h1>
+  <p>Ciclos, geração de jogos, meus jogos e conferência automática.</p>
+</header>
+
+<nav>
+  <button data-aba="ciclos" class="ativo">Ciclos</button>
+  <button data-aba="gerar">Gerar jogos</button>
+  <button data-aba="meus-jogos">Meus jogos</button>
+  <button data-aba="conferencia">Conferência</button>
+</nav>
+
+<main>
+
+  <!-- ===================== CICLOS ===================== -->
+  <section id="aba-ciclos" class="aba ativa">
+    <div class="cartao">
+      <h2>Dezenas atrasadas por categoria</h2>
+      <div id="ciclos-status" class="carregando">Carregando…</div>
+      <div id="ciclos-tabela"></div>
+    </div>
+    <div class="cartao">
+      <h2>Duração média dos ciclos</h2>
+      <div id="duracao-status" class="carregando">Carregando…</div>
+      <div id="duracao-tabela"></div>
+    </div>
+  </section>
+
+  <!-- ===================== GERAR JOGOS ===================== -->
+  <section id="aba-gerar" class="aba">
+    <div class="cartao">
+      <h2>Gerar jogos (regras do CRIVO)</h2>
+      <div class="linha-form">
+        <label for="qtd-jogos">Quantidade:</label>
+        <input type="number" id="qtd-jogos" value="5" min="1" max="50" style="width:70px" />
+        <button class="acao" id="btn-gerar">Gerar</button>
+      </div>
+      <div id="gerar-status"></div>
+      <div id="gerar-resultado"></div>
+    </div>
+  </section>
+
+  <!-- ===================== MEUS JOGOS ===================== -->
+  <section id="aba-meus-jogos" class="aba">
+    <div class="cartao">
+      <h2>Cadastrar jogo manualmente</h2>
+      <div class="linha-form">
+        <input type="text" id="novo-jogo-nome" placeholder="Nome do jogo" />
+        <input type="text" id="novo-jogo-dezenas" placeholder="Dezenas separadas por vírgula (ex: 1,2,3,4,...)" style="flex:1; min-width:220px;" />
+        <button class="acao" id="btn-cadastrar-jogo">Cadastrar</button>
+      </div>
+      <div id="cadastrar-status"></div>
+    </div>
+    <div class="cartao">
+      <h2>Jogos cadastrados</h2>
+      <div id="meus-jogos-status" class="carregando">Carregando…</div>
+      <div id="meus-jogos-tabela"></div>
+    </div>
+  </section>
+
+  <!-- ===================== CONFERÊNCIA ===================== -->
+  <section id="aba-conferencia" class="aba">
+    <div class="cartao">
+      <h2>Painel de conferência</h2>
+      <div id="conferencia-status" class="carregando">Carregando…</div>
+      <div id="conferencia-tabela"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// =====================================================================
+// CONFIGURAÇÃO — preencha com os dados do seu projeto Supabase
+// (Project Settings → API no painel do Supabase).
+// =====================================================================
+const SUPABASE_URL = 'https://SEU-PROJETO.supabase.co';
+const SUPABASE_ANON_KEY = 'SUA-ANON-KEY-AQUI';
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ---------------------------------------------------------------------
+// Navegação entre abas
+// ---------------------------------------------------------------------
+document.querySelectorAll('nav button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach((b) => b.classList.remove('ativo'));
+    document.querySelectorAll('.aba').forEach((a) => a.classList.remove('ativa'));
+    btn.classList.add('ativo');
+    document.getElementById('aba-' + btn.dataset.aba).classList.add('ativa');
+  });
+});
+
+// ---------------------------------------------------------------------
+// Utilitário: monta uma tabela HTML genérica a partir de um array de
+// objetos, sem precisar saber de antemão quais colunas existem.
+// ---------------------------------------------------------------------
+function montarTabelaGenerica(linhas) {
+  if (!linhas || linhas.length === 0) {
+    return '<p style="color:#888;">Nenhum dado encontrado.</p>';
+  }
+  const colunas = Object.keys(linhas[0]);
+  let html = '<table><thead><tr>';
+  colunas.forEach((c) => (html += `<th>${c}</th>`));
+  html += '</tr></thead><tbody>';
+  linhas.forEach((linha) => {
+    html += '<tr>';
+    colunas.forEach((c) => {
+      let valor = linha[c];
+      if (Array.isArray(valor)) {
+        valor = valor.map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`).join(' ');
+      } else if (valor === null || valor === undefined) {
+        valor = '<span style="color:#bbb;">—</span>';
+      }
+      html += `<td>${valor}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function badgeStatus(status) {
+  const classe = status === 'ativo' ? 'badge-ativo' : status === 'jogado' ? 'badge-jogado' : 'badge-outro';
+  return `<span class="badge-status ${classe}">${status ?? '—'}</span>`;
+}
+
+// ---------------------------------------------------------------------
+// Aba Ciclos
+// ---------------------------------------------------------------------
+async function carregarCiclos() {
+  const statusEl = document.getElementById('ciclos-status');
+  const tabelaEl = document.getElementById('ciclos-tabela');
+  const { data, error } = await supabase.from('dezenas_atrasadas').select('*');
+  if (error) {
+    statusEl.textContent = 'Erro ao carregar: ' + error.message;
+    statusEl.className = 'msg-erro';
+    return;
+  }
+  statusEl.textContent = '';
+  tabelaEl.innerHTML = montarTabelaGenerica(data);
+}
+
+async function carregarDuracaoCiclos() {
+  const statusEl = document.getElementById('duracao-status');
+  const tabelaEl = document.getElementById('duracao-tabela');
+  const { data, error } = await supabase.from('duracao_media_ciclos').select('*');
+  if (error) {
+    statusEl.textContent = 'Erro ao carregar: ' + error.message;
+    statusEl.className = 'msg-erro';
+    return;
+  }
+  statusEl.textContent = '';
+  tabelaEl.innerHTML = montarTabelaGenerica(data);
+}
+
+// ---------------------------------------------------------------------
+// Aba Gerar jogos
+// ---------------------------------------------------------------------
+document.getElementById('btn-gerar').addEventListener('click', async () => {
+  const qtd = parseInt(document.getElementById('qtd-jogos').value, 10) || 5;
+  const statusEl = document.getElementById('gerar-status');
+  const resultadoEl = document.getElementById('gerar-resultado');
+  const botao = document.getElementById('btn-gerar');
+
+  botao.disabled = true;
+  statusEl.innerHTML = '<span class="carregando">Gerando…</span>';
+  resultadoEl.innerHTML = '';
+
+  const { data, error } = await supabase.rpc('gerar_jogos', { p_qtd: qtd });
+
+  botao.disabled = false;
+
+  if (error) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao gerar: ${error.message}</span>`;
+    return;
+  }
+
+  statusEl.innerHTML = `<span class="msg-ok">${data.length} jogo(s) gerado(s).</span>`;
+  resultadoEl.innerHTML = montarTabelaGenerica(data);
+
+  // Botão pra cadastrar cada jogo gerado direto em meus_jogos
+  data.forEach((jogo, i) => {
+    const btn = document.createElement('button');
+    btn.textContent = `Cadastrar jogo ${i + 1}`;
+    btn.className = 'acao secundario';
+    btn.style.margin = '4px';
+    btn.addEventListener('click', async () => {
+      const dezenas = jogo.dezenas ?? jogo.numeros ?? jogo.jogo;
+      const { error: erroInsert } = await supabase
+        .from('meus_jogos')
+        .insert({ nome: `Gerado ${new Date().toLocaleDateString('pt-BR')} #${i + 1}`, dezenas });
+      if (erroInsert) {
+        alert('Erro ao cadastrar: ' + erroInsert.message);
+      } else {
+        btn.textContent = 'Cadastrado ✓';
+        btn.disabled = true;
+        carregarMeusJogos();
+      }
+    });
+    resultadoEl.appendChild(btn);
+  });
+});
+
+// ---------------------------------------------------------------------
+// Aba Meus jogos
+// ---------------------------------------------------------------------
+document.getElementById('btn-cadastrar-jogo').addEventListener('click', async () => {
+  const nome = document.getElementById('novo-jogo-nome').value.trim() || 'Jogo manual';
+  const dezenasTexto = document.getElementById('novo-jogo-dezenas').value.trim();
+  const statusEl = document.getElementById('cadastrar-status');
+
+  const dezenas = dezenasTexto
+    .split(',')
+    .map((d) => parseInt(d.trim(), 10))
+    .filter((d) => !isNaN(d));
+
+  if (dezenas.length !== 15) {
+    statusEl.innerHTML = `<span class="msg-erro">A Lotofácil precisa de exatamente 15 dezenas (você digitou ${dezenas.length}).</span>`;
+    return;
+  }
+
+  const { error } = await supabase.from('meus_jogos').insert({ nome, dezenas });
+  if (error) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro: ${error.message}</span>`;
+  } else {
+    statusEl.innerHTML = '<span class="msg-ok">Jogo cadastrado!</span>';
+    document.getElementById('novo-jogo-nome').value = '';
+    document.getElementById('novo-jogo-dezenas').value = '';
+    carregarMeusJogos();
+  }
+});
+
+async function carregarMeusJogos() {
+  const statusEl = document.getElementById('meus-jogos-status');
+  const tabelaEl = document.getElementById('meus-jogos-tabela');
+
+  const { data, error } = await supabase
+    .from('export_jogos_texto')
+    .select('*');
+
+  if (error) {
+    statusEl.textContent = 'Erro ao carregar: ' + error.message;
+    statusEl.className = 'msg-erro';
+    return;
+  }
+
+  statusEl.textContent = '';
+
+  if (!data || data.length === 0) {
+    tabelaEl.innerHTML = '<p style="color:#888;">Nenhum jogo cadastrado ainda.</p>';
+    return;
+  }
+
+  let html = '<table><thead><tr><th>Nome</th><th>Dezenas</th><th>Status</th><th></th></tr></thead><tbody>';
+  data.forEach((jogo) => {
+    html += `<tr>
+      <td>${jogo.nome ?? '—'}</td>
+      <td style="font-family:monospace;">${jogo.dezenas_formatadas ?? '—'}</td>
+      <td>${badgeStatus(jogo.status)}</td>
+      <td><button class="acao secundario copiar-dezenas" data-dezenas="${jogo.dezenas_formatadas ?? ''}">Copiar</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  tabelaEl.innerHTML = html;
+
+  tabelaEl.querySelectorAll('.copiar-dezenas').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.dezenas);
+      btn.textContent = 'Copiado ✓';
+      setTimeout(() => (btn.textContent = 'Copiar'), 1500);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------
+// Aba Conferência
+// ---------------------------------------------------------------------
+async function carregarConferencia() {
+  const statusEl = document.getElementById('conferencia-status');
+  const tabelaEl = document.getElementById('conferencia-tabela');
+  const { data, error } = await supabase.from('painel_conferencias').select('*');
+  if (error) {
+    statusEl.textContent = 'Erro ao carregar: ' + error.message;
+    statusEl.className = 'msg-erro';
+    return;
+  }
+  statusEl.textContent = '';
+  tabelaEl.innerHTML = montarTabelaGenerica(data);
+}
+
+// ---------------------------------------------------------------------
+// Carga inicial
+// ---------------------------------------------------------------------
+carregarCiclos();
+carregarDuracaoCiclos();
+carregarMeusJogos();
+carregarConferencia();
+</script>
+
+</body>
+</html>
