@@ -495,8 +495,9 @@ async function carregarAnalise() {
     linhas.push({ atual, repetidas, porCategoria, linhasVolante });
   }
 
-  // mostrar do concurso mais recente pro mais antigo
-  linhas.reverse();
+  // mostrar do concurso mais recente pro mais antigo, ordenando pela data
+  // (não só pelo número do concurso, pra ficar à prova de qualquer furo na numeração)
+  linhas.sort((a, b) => new Date(b.atual.data_sorteio) - new Date(a.atual.data_sorteio));
 
   let html = `<table>
     <thead>
@@ -504,7 +505,7 @@ async function carregarAnalise() {
         <th>Concurso</th>
         <th>Data</th>
         <th>Dezenas sorteadas</th>
-        <th>Repetidas do anterior</th>
+        <th style="min-width:140px;">Repetidas do anterior</th>
         <th>Primos</th>
         <th>Fibonacci</th>
         <th>Moldura</th>
@@ -519,7 +520,7 @@ async function carregarAnalise() {
       <td>${atual.concurso}</td>
       <td>${atual.data_sorteio ?? '—'}</td>
       <td>${chipsDezenas(atual.dezenas)}</td>
-      <td><strong>${repetidas.length}</strong> ${chipsDezenas(repetidas)}</td>
+      <td><div style="font-weight:bold; margin-bottom:4px;">${repetidas.length} repetida${repetidas.length === 1 ? '' : 's'}</div>${chipsDezenas(repetidas)}</td>
       <td>${chipsDezenas(porCategoria.primos)}</td>
       <td>${chipsDezenas(porCategoria.fibonacci)}</td>
       <td>${chipsDezenas(porCategoria.moldura)}</td>
