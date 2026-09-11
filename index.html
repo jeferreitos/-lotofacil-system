@@ -148,7 +148,10 @@
 
   /* ---------- Grade histórica (estilo planilha) ---------- */
   .grade-container { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
-  .grade-linha-topo, .grade-linha-meio, .grade-linha-baixo { display: flex; flex-wrap: wrap; gap: 14px; }
+  .grade-secao-superior { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; }
+  .grade-coluna-esquerda { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-width: 0; }
+  .grade-coluna-direita { flex: 0 0 auto; }
+  .grade-linha-dupla, .grade-linha-meio, .grade-linha-baixo, .grade-linha-pares, .grade-linha-soma { display: flex; flex-wrap: wrap; gap: 14px; }
   .grade-bloco { flex: 0 0 auto; }
   .tabela-grade { border-collapse: collapse; font-size: 12px; text-align: center; }
   .tabela-grade th, .tabela-grade td { border: 2px solid #fff; padding: 5px 8px; min-width: 28px; }
@@ -694,24 +697,36 @@ async function carregarGradeHistorica(jogosMetricas) {
 
   statusEl.textContent = '';
 
-  // Linha de cima: primos, moldura, mágicos, fibonacci
-  // Linha do meio: as 5 linhas do volante (L1..L5) + repetidas (preenche o
-  // espaço que sobra ao lado das linhas)
-  // Linha de baixo: pares, ímpares e soma
-  const topo = CATEGORIAS_GRADE.slice(0, 4);
-  const linhasVolante = CATEGORIAS_GRADE.slice(4);
+  const [primos, moldura, magicos, fibonacci, linha1, linha2, linha3, linha4, linha5] = CATEGORIAS_GRADE;
 
   containerEl.innerHTML = `
-    <div class="grade-linha-topo">${topo.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('')}</div>
+    <div class="grade-secao-superior">
+      <div class="grade-coluna-esquerda">
+        <div class="grade-linha-dupla">
+          ${renderGradeCategoria(primos, distMap, jogosMetricas)}
+          ${renderGradeCategoria(moldura, distMap, jogosMetricas)}
+        </div>
+        <div class="grade-linha-dupla">
+          ${renderGradeCategoria(magicos, distMap, jogosMetricas)}
+          ${renderGradeCategoria(fibonacci, distMap, jogosMetricas)}
+        </div>
+      </div>
+      <div class="grade-coluna-direita">${renderGradeRepetidas(distMap, jogosMetricas)}</div>
+    </div>
     <div class="grade-linha-meio">
-      ${linhasVolante.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('')}
-      ${renderGradeRepetidas(distMap, jogosMetricas)}
+      ${renderGradeCategoria(linha1, distMap, jogosMetricas)}
+      ${renderGradeCategoria(linha2, distMap, jogosMetricas)}
+      ${renderGradeCategoria(linha3, distMap, jogosMetricas)}
     </div>
     <div class="grade-linha-baixo">
+      ${renderGradeCategoria(linha4, distMap, jogosMetricas)}
+      ${renderGradeCategoria(linha5, distMap, jogosMetricas)}
+    </div>
+    <div class="grade-linha-pares">
       ${renderGradeCategoria(CATEGORIA_PARES, distMap, jogosMetricas)}
       ${renderGradeCategoria(CATEGORIA_IMPARES, distMap, jogosMetricas)}
-      ${renderGradeSoma(distMap, jogosMetricas)}
     </div>
+    <div class="grade-linha-soma">${renderGradeSoma(distMap, jogosMetricas)}</div>
   `;
 
   renderAlertaMetricasRaras(distMap, jogosMetricas);
