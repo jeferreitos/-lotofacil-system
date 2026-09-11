@@ -142,7 +142,10 @@
   .matriz-atraso td.cel-off { background: #fff; }
 
   /* ---------- Grade histórica (estilo planilha) ---------- */
-  .grade-container { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 4px; }
+  .grade-container { display: flex; gap: 20px; align-items: flex-start; margin-top: 4px; flex-wrap: wrap; }
+  .grade-principal { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-width: 0; }
+  .grade-linha-topo, .grade-linha-baixo { display: flex; flex-wrap: wrap; gap: 14px; }
+  .grade-lateral { flex: 0 0 auto; }
   .grade-bloco { flex: 0 0 auto; }
   .tabela-grade { border-collapse: collapse; font-size: 12px; text-align: center; }
   .tabela-grade th, .tabela-grade td { border: 2px solid #fff; padding: 5px 8px; min-width: 28px; }
@@ -508,7 +511,7 @@ const NOME_VIEW_DISTRIBUICAO = 'vw_distribuicao_metricas';
 
 const CATEGORIAS_GRADE = [
   { chave: 'primos',    titulo: 'PRIMOS',    corHeader: '#22b6d9', corValor: '#d7f2fa', valores: [1,2,3,4,5,6,7,8,9] },
-  { chave: 'moldura',   titulo: 'MOLDURA',   corHeader: '#a8601f', corValor: '#f0d9c4', valores: [5,6,7,8,9,10,11,12,13] },
+  { chave: 'moldura',   titulo: 'MOLDURA',   corHeader: '#a8601f', corValor: '#f0d9c4', valores: [5,6,7,8,9,10,11,12,13,14] },
   { chave: 'magicos',   titulo: 'MÁGICOS',   corHeader: '#d24fd6', corValor: '#f6d9f7', valores: [1,2,3,4,5,6,7,8,9] },
   { chave: 'fibonacci', titulo: 'FIBONACCI', corHeader: '#f2a900', corValor: '#fdecc8', valores: [1,2,3,4,5,6,7] },
   { chave: 'linha1',    titulo: 'LINHA 1',   corHeader: '#1f3864', corValor: '#cfe2f3', valores: [1,2,3,4,5] },
@@ -526,6 +529,19 @@ function tierClasse(qtd, maxDaLinha) {
   if (proporcao < 0.15) return 'tier-baixo';
   if (proporcao < 0.5) return 'tier-medio';
   return 'tier-alto';
+}
+
+// Classifica se um valor de uma métrica é "raro" no histórico (mesma regra
+// de cor usada na grade). Retorna 'fora' quando o valor é raro/nunca ocorreu
+// (tier-baixo ou tier-zero), e 'dentro' caso contrário. Usada para colorir
+// só o que é digno de atenção na tabela "Jogos cadastrados".
+function classeRaridade(chave, valor, distMap) {
+  const cfg = CATEGORIAS_GRADE.find((c) => c.chave === chave);
+  if (!cfg || valor === null || valor === undefined) return 'dentro';
+  const linhaMetrica = distMap[chave] ?? {};
+  const max = Math.max(0, ...cfg.valores.map((v) => linhaMetrica[v] ?? 0));
+  const classe = tierClasse(linhaMetrica[valor] ?? 0, max);
+  return classe === 'tier-baixo' || classe === 'tier-zero' ? 'fora' : 'dentro';
 }
 
 async function buscarDistribuicaoHistorica() {
@@ -641,9 +657,20 @@ async function carregarGradeHistorica(jogosMetricas) {
   }
 
   statusEl.textContent = '';
-  containerEl.innerHTML =
-    CATEGORIAS_GRADE.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('') +
-    renderGradeRepetidas(distMap, jogosMetricas);
+
+  // Linha de cima: primos, moldura, mágicos, fibonacci
+  // Linha de baixo: as 5 linhas do volante (L1..L5)
+  // Coluna lateral (à direita de tudo): repetidas
+  const topo = CATEGORIAS_GRADE.slice(0, 4);
+  const baixo = CATEGORIAS_GRADE.slice(4);
+
+  containerEl.innerHTML = `
+    <div class="grade-principal">
+      <div class="grade-linha-topo">${topo.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('')}</div>
+      <div class="grade-linha-baixo">${baixo.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('')}</div>
+    </div>
+    <div class="grade-lateral">${renderGradeRepetidas(distMap, jogosMetricas)}</div>
+  `;
 
   renderAlertaMetricasRaras(distMap, jogosMetricas);
 }
@@ -675,10 +702,8 @@ async function carregarMeusJogos() {
     return;
   }
 
-  // Observação: as colunas Primos/Repetidas aqui embaixo ainda usam a view
-  // "faixas_aceitaveis" pra colorir fora/dentro — se ela continuar com o
-  // bug de faixa null-null, vale trocar essa fonte também pela mesma lógica
-  // nova (concursos + categorias_numeros) usada na grade acima.
+  // Par e Soma continuam usando a faixa min/max de "faixas_aceitaveis"
+  // (não têm distribuição histórica calculada na materialized view).
   let faixas = {};
   try {
     faixas = await obterFaixasAceitaveis();
@@ -686,9 +711,25 @@ async function carregarMeusJogos() {
     // segue sem destaque de cor se der erro ao buscar as faixas
   }
 
+  // Primos / Moldura / Mágicos / Fibonacci agora usam a MESMA lógica de
+  // raridade da grade histórica (tier-baixo / tier-zero = "raro"), em vez
+  // do min/max fixo — assim só pinta de vermelho o que é realmente raro.
+  let distMapTabela = null;
+  try {
+    distMapTabela = await buscarDistribuicaoHistorica();
+  } catch (e) {
+    // se falhar, cai no fallback de faixas min/max lá embaixo
+  }
+
   const celulaMetrica = (valor, metrica) => {
     const faixa = faixas[metrica];
     const classe = foraDaFaixa(valor, faixa) ? 'fora' : 'dentro';
+    return `<td class="${classe}">${valor ?? '—'}</td>`;
+  };
+
+  const celulaMetricaRara = (valor, chave) => {
+    if (!distMapTabela) return celulaMetrica(valor, chave); // fallback se a view falhar
+    const classe = classeRaridade(chave, valor, distMapTabela);
     return `<td class="${classe}">${valor ?? '—'}</td>`;
   };
 
@@ -712,10 +753,10 @@ async function carregarMeusJogos() {
       <td>${impares}</td>
       ${celulaMetrica(jogo.soma, 'soma')}
       <td>${jogo.repetidas ?? '—'}</td>
-      ${celulaMetrica(jogo.primos, 'primos')}
-      ${celulaMetrica(jogo.moldura, 'moldura')}
-      ${celulaMetrica(jogo.magicos, 'magicos')}
-      ${celulaMetrica(jogo.fibonacci, 'fibonacci')}
+      ${celulaMetricaRara(jogo.primos, 'primos')}
+      ${celulaMetricaRara(jogo.moldura, 'moldura')}
+      ${celulaMetricaRara(jogo.magicos, 'magicos')}
+      ${celulaMetricaRara(jogo.fibonacci, 'fibonacci')}
       ${celulaMetrica(jogo.linha1, 'linha1')}
       ${celulaMetrica(jogo.linha2, 'linha2')}
       ${celulaMetrica(jogo.linha3, 'linha3')}
