@@ -148,9 +148,25 @@
 
   /* ---------- Grade histórica (estilo planilha) ---------- */
   .grade-container { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
-  .grade-secao-superior { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+
+  /* CORRIGIDO: a REPETIDAS (.grade-coluna-direita) agora usa position:absolute,
+     saindo do fluxo normal do flex. Assim a altura de .grade-secao-superior
+     passa a ser definida só pela coluna esquerda (PRIMOS/MOLDURA/MÁGICOS/
+     FIBONACCI), e o que vem depois (LINHA 1/2/3...) não fica mais empurrado
+     pra baixo pela altura da REPETIDAS. */
+  .grade-secao-superior {
+    position: relative;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding-right: 140px; /* reserva espaço pra REPETIDAS flutuar por cima; ajuste se necessário */
+  }
   .grade-coluna-esquerda { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-width: 0; }
-  .grade-coluna-direita { flex: 0 0 auto; }
+  .grade-coluna-direita {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
   .grade-linha-dupla, .grade-linha-meio, .grade-linha-baixo, .grade-linha-pares, .grade-linha-soma { display: flex; flex-wrap: wrap; gap: 14px; }
   .grade-bloco { flex: 0 0 auto; }
   .tabela-grade { border-collapse: collapse; font-size: 12px; text-align: center; }
