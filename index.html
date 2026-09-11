@@ -124,6 +124,11 @@
   .tabela-metricas td.fora { background: #fde2e2; color: #b91c1c; font-weight: bold; }
   .tabela-metricas td.dentro { background: #eafaf0; }
 
+  /* Cabeçalho fixo: a tabela de jogos cadastrados rola dentro da própria
+     área (altura limitada) e o cabeçalho fica grudado no topo dela. */
+  #meus-jogos-tabela { max-height: 70vh; overflow: auto; }
+  .tabela-metricas thead th { position: sticky; top: 0; background: #fafafa; z-index: 2; }
+
   .matriz-atraso {
     width: 100%;
     border-collapse: collapse;
@@ -142,10 +147,8 @@
   .matriz-atraso td.cel-off { background: #fff; }
 
   /* ---------- Grade histórica (estilo planilha) ---------- */
-  .grade-container { display: flex; gap: 20px; align-items: flex-start; margin-top: 4px; flex-wrap: wrap; }
-  .grade-principal { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-width: 0; }
-  .grade-linha-topo, .grade-linha-baixo { display: flex; flex-wrap: wrap; gap: 14px; }
-  .grade-lateral { flex: 0 0 auto; }
+  .grade-container { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+  .grade-linha-topo, .grade-linha-meio, .grade-linha-baixo { display: flex; flex-wrap: wrap; gap: 14px; }
   .grade-bloco { flex: 0 0 auto; }
   .tabela-grade { border-collapse: collapse; font-size: 12px; text-align: center; }
   .tabela-grade th, .tabela-grade td { border: 2px solid #fff; padding: 5px 8px; min-width: 28px; }
@@ -522,6 +525,17 @@ const CATEGORIAS_GRADE = [
 ];
 const CATEGORIA_REPETIDAS = { chave: 'repetidas', titulo: 'REPETIDAS', corHeader: '#cc0000', valores: Array.from({length:12}, (_, i) => i + 4) }; // 4..15
 
+const CATEGORIA_PARES   = { chave: 'pares',   titulo: 'PARES',   corHeader: '#2e7d32', corValor: '#dcedc8', valores: [3,4,5,6,7,8,9,10,11,12] };
+const CATEGORIA_IMPARES = { chave: 'impares', titulo: 'ÍMPARES', corHeader: '#6a1b9a', corValor: '#ede7f6', valores: [3,4,5,6,7,8,9,10,11,12] };
+
+// Soma agrupada em faixas de 10 (150-159, 160-169, ...), porque o valor
+// bruto varia demais (~150 a ~250) pra caber numa grade célula-a-célula.
+const BUCKETS_SOMA = [150,160,170,180,190,200,210,220,230,240];
+
+// Categorias que entram na checagem de "valor raro" (tabela de jogos e
+// caixa de alerta). Soma fica de fora por usar faixas, não valor exato.
+const CATEGORIAS_RARIDADE = [...CATEGORIAS_GRADE, CATEGORIA_PARES, CATEGORIA_IMPARES];
+
 function tierClasse(qtd, maxDaLinha) {
   if (!qtd) return 'tier-zero';
   if (maxDaLinha <= 0) return 'tier-zero';
@@ -536,7 +550,7 @@ function tierClasse(qtd, maxDaLinha) {
 // (tier-baixo ou tier-zero), e 'dentro' caso contrário. Usada para colorir
 // só o que é digno de atenção na tabela "Jogos cadastrados".
 function classeRaridade(chave, valor, distMap) {
-  const cfg = CATEGORIAS_GRADE.find((c) => c.chave === chave);
+  const cfg = CATEGORIAS_RARIDADE.find((c) => c.chave === chave);
   if (!cfg || valor === null || valor === undefined) return 'dentro';
   const linhaMetrica = distMap[chave] ?? {};
   const max = Math.max(0, ...cfg.valores.map((v) => linhaMetrica[v] ?? 0));
@@ -579,6 +593,28 @@ function renderGradeCategoria(cfg, distMap, jogosMetricas) {
     </div>`;
 }
 
+function renderGradeSoma(distMap, jogosMetricas) {
+  const linhaMetrica = distMap.soma ?? {};
+  const max = Math.max(0, ...BUCKETS_SOMA.map((v) => linhaMetrica[v] ?? 0));
+
+  const celulasValor = BUCKETS_SOMA.map((v) => `<th style="background:#ffe0b2;">${v}-${v + 9}</th>`).join('');
+  const celulasQtd = BUCKETS_SOMA.map((v) => {
+    const qtd = linhaMetrica[v] ?? 0;
+    const classe = tierClasse(qtd, max);
+    const temJogo = jogosMetricas.some((j) => Math.floor((j.soma ?? -1) / 10) * 10 === v);
+    return `<td class="${classe}${temJogo ? ' marcado' : ''}" title="${temJogo ? 'Você tem jogo(s) nessa faixa' : ''}">${qtd}</td>`;
+  }).join('');
+
+  return `
+    <div class="grade-bloco">
+      <table class="tabela-grade">
+        <tr><th class="titulo-categoria" colspan="${BUCKETS_SOMA.length}" style="background:#e65100;">SOMA</th></tr>
+        <tr>${celulasValor}</tr>
+        <tr>${celulasQtd}</tr>
+      </table>
+    </div>`;
+}
+
 function renderGradeRepetidas(distMap, jogosMetricas) {
   const linhaMetrica = distMap.repetidas ?? {};
   const valores = CATEGORIA_REPETIDAS.valores;
@@ -611,7 +647,7 @@ function renderAlertaMetricasRaras(distMap, jogosMetricas) {
 
   jogosMetricas.forEach((jogo) => {
     const metricasRaras = [];
-    [...CATEGORIAS_GRADE, CATEGORIA_REPETIDAS].forEach((cfg) => {
+    [...CATEGORIAS_GRADE, CATEGORIA_REPETIDAS, CATEGORIA_PARES, CATEGORIA_IMPARES].forEach((cfg) => {
       const valor = jogo[cfg.chave];
       if (valor === null || valor === undefined) return;
       const linhaMetrica = distMap[cfg.chave] ?? {};
@@ -659,17 +695,23 @@ async function carregarGradeHistorica(jogosMetricas) {
   statusEl.textContent = '';
 
   // Linha de cima: primos, moldura, mágicos, fibonacci
-  // Linha de baixo: as 5 linhas do volante (L1..L5)
-  // Coluna lateral (à direita de tudo): repetidas
+  // Linha do meio: as 5 linhas do volante (L1..L5) + repetidas (preenche o
+  // espaço que sobra ao lado das linhas)
+  // Linha de baixo: pares, ímpares e soma
   const topo = CATEGORIAS_GRADE.slice(0, 4);
-  const baixo = CATEGORIAS_GRADE.slice(4);
+  const linhasVolante = CATEGORIAS_GRADE.slice(4);
 
   containerEl.innerHTML = `
-    <div class="grade-principal">
-      <div class="grade-linha-topo">${topo.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('')}</div>
-      <div class="grade-linha-baixo">${baixo.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('')}</div>
+    <div class="grade-linha-topo">${topo.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('')}</div>
+    <div class="grade-linha-meio">
+      ${linhasVolante.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('')}
+      ${renderGradeRepetidas(distMap, jogosMetricas)}
     </div>
-    <div class="grade-lateral">${renderGradeRepetidas(distMap, jogosMetricas)}</div>
+    <div class="grade-linha-baixo">
+      ${renderGradeCategoria(CATEGORIA_PARES, distMap, jogosMetricas)}
+      ${renderGradeCategoria(CATEGORIA_IMPARES, distMap, jogosMetricas)}
+      ${renderGradeSoma(distMap, jogosMetricas)}
+    </div>
   `;
 
   renderAlertaMetricasRaras(distMap, jogosMetricas);
@@ -749,7 +791,7 @@ async function carregarMeusJogos() {
       <td>${jogo.nome ?? '—'}</td>
       <td>${badgeStatus(jogo.status)}</td>
       <td>${chipsDezenas(dezenasOrdenadas)}</td>
-      ${celulaMetrica(jogo.pares, 'pares')}
+      ${celulaMetricaRara(jogo.pares, 'pares')}
       <td>${impares}</td>
       ${celulaMetrica(jogo.soma, 'soma')}
       <td>${jogo.repetidas ?? '—'}</td>
