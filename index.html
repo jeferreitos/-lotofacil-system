@@ -83,6 +83,11 @@
     color: var(--roxo);
     border: 1px solid var(--roxo);
   }
+  button.perigo {
+    background: #fff;
+    color: var(--vermelho);
+    border: 1px solid var(--vermelho);
+  }
 
   input[type="number"], input[type="text"] {
     padding: 6px 8px;
@@ -118,16 +123,6 @@
   .tabela-metricas th, .tabela-metricas td { text-align: center; padding: 4px 6px; }
   .tabela-metricas td.fora { background: #fde2e2; color: #b91c1c; font-weight: bold; }
   .tabela-metricas td.dentro { background: #eafaf0; }
-  .chip-jogo-fora {
-    display: inline-block;
-    background: #fde2e2;
-    color: #b91c1c;
-    border: 1px solid #f3b4b4;
-    border-radius: 4px;
-    padding: 2px 6px;
-    margin: 2px;
-    font-size: 12px;
-  }
 
   .matriz-atraso {
     width: 100%;
@@ -145,6 +140,26 @@
   .matriz-atraso td.col-concurso { background: #e07b1f; color: #fff; font-weight: bold; }
   .matriz-atraso td.cel-on { background: #3aa0e0; color: #fff; font-weight: bold; }
   .matriz-atraso td.cel-off { background: #fff; }
+
+  /* ---------- Grade histórica (estilo planilha) ---------- */
+  .grade-container { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 4px; }
+  .grade-bloco { flex: 0 0 auto; }
+  .tabela-grade { border-collapse: collapse; font-size: 12px; text-align: center; }
+  .tabela-grade th, .tabela-grade td { border: 2px solid #fff; padding: 5px 8px; min-width: 28px; }
+  .tabela-grade th.titulo-categoria { font-weight: bold; color: #fff; font-size: 12px; letter-spacing: 0.3px; }
+  .tabela-grade td.tier-alto  { background: #a9d18e; }
+  .tabela-grade td.tier-medio { background: #ffe699; }
+  .tabela-grade td.tier-baixo { background: #f4a7a7; color: #7a1414; font-weight: bold; }
+  .tabela-grade td.tier-zero  { background: #cfd8dc; color: #555; }
+  .tabela-grade td.marcado    { outline: 3px solid #222; outline-offset: -2px; position: relative; }
+  .tabela-grade-vertical td.rotulo { background: #f0f0f0; font-weight: bold; }
+  .grade-legenda { font-size: 12px; color: #555; margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .grade-legenda span { display: inline-flex; align-items: center; gap: 4px; }
+  .grade-legenda i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+  .caixa-alerta { margin-top: 14px; border: 1px solid #f3b4b4; border-radius: 6px; overflow: hidden; }
+  .caixa-alerta .titulo { background: var(--vermelho); color: #fff; font-weight: bold; padding: 6px 10px; font-size: 13px; }
+  .caixa-alerta .corpo { background: #fff3cd; color: #7a1414; padding: 8px 10px; font-size: 13px; }
+  .caixa-alerta .corpo ul { margin: 4px 0 0; padding-left: 18px; }
 </style>
 </head>
 <body>
@@ -206,22 +221,26 @@
     <div class="cartao">
       <h2>Resumo — comparação com o histórico</h2>
       <p style="font-size:12px; color:#666; margin-top:-6px;">
-        Faixa aceitável = percentil 10-90 de cada métrica em todo o histórico de concursos.
-        Jogos fora dessa faixa em alguma métrica aparecem destacados aqui e na tabela abaixo.
+        Cada grade mostra, para cada valor possível da métrica, quantos dos concursos já sorteados
+        tiveram exatamente esse valor. Colunas com contorno mais grosso marcam o valor de algum dos
+        seus jogos cadastrados.
       </p>
-      <div style="display:flex; gap:16px; flex-wrap:wrap;">
-        <div style="flex:2; min-width:280px;">
-          <div id="resumo-metricas-status" class="carregando">Carregando…</div>
-          <div id="resumo-metricas-tabela"></div>
-        </div>
-        <div style="flex:1; min-width:220px; border-left:1px solid #eee; padding-left:16px;">
-          <h3 style="margin:0 0 8px; font-size:14px;">Repetidas do último concurso</h3>
-          <div id="resumo-repetidas"></div>
-        </div>
+      <div id="grade-historico-status" class="carregando">Carregando…</div>
+      <div id="grade-historico" class="grade-container"></div>
+      <div class="grade-legenda">
+        <span><i style="background:#a9d18e;"></i> comum no histórico</span>
+        <span><i style="background:#ffe699;"></i> intermediário</span>
+        <span><i style="background:#f4a7a7;"></i> raro</span>
+        <span><i style="background:#cfd8dc;"></i> nunca ocorreu</span>
+        <span><i style="background:#fff; outline:2px solid #222; outline-offset:-1px;"></i> valor de um jogo seu</span>
       </div>
+      <div id="grade-alerta"></div>
     </div>
     <div class="cartao">
-      <h2>Jogos cadastrados</h2>
+      <h2>
+        Jogos cadastrados
+        <button id="btn-copiar-todos" class="acao secundario" style="float:right; font-size:12px; padding:6px 10px;">Copiar todos</button>
+      </h2>
       <div id="meus-jogos-status" class="carregando">Carregando…</div>
       <div id="meus-jogos-tabela" style="overflow-x:auto;"></div>
     </div>
@@ -318,6 +337,11 @@ function badgeStatus(status) {
   return `<span class="badge-status ${classe}">${status ?? '—'}</span>`;
 }
 
+function chipsDezenas(lista) {
+  if (!lista || lista.length === 0) return '<span style="color:#bbb;">—</span>';
+  return lista.map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`).join(' ');
+}
+
 // ---------------------------------------------------------------------
 // Aba Ciclos
 // ---------------------------------------------------------------------
@@ -333,10 +357,6 @@ async function carregarCiclos() {
   statusEl.textContent = '';
   tabelaEl.innerHTML = montarTabelaGenerica(data);
 
-  // Linha-resumo: união (sem repetir) de todas as dezenas que aparecem em
-  // "dezenas_faltando" de qualquer categoria — uma mesma dezena pode faltar
-  // em mais de uma categoria (ex: uma dezena pode ser primo E mágico ao
-  // mesmo tempo), por isso a soma direta das colunas duplicaria números.
   const todasFaltando = new Set();
   (data ?? []).forEach((linha) => {
     (linha.dezenas_faltando ?? []).forEach((d) => todasFaltando.add(d));
@@ -388,8 +408,6 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
   statusEl.innerHTML = `<span class="msg-ok">${data.length} jogo(s) gerado(s).</span>`;
   resultadoEl.innerHTML = montarTabelaGenerica(data);
 
-  // Lista com todas as dezenas usadas na leva de jogos gerados, com quantas
-  // vezes cada uma apareceu entre os jogos.
   const contagemDezenas = {};
   data.forEach((jogo) => {
     const dezenas = jogo.dezenas ?? jogo.numeros ?? jogo.jogo ?? [];
@@ -410,7 +428,6 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
       .join(' ')}</div>`;
   resultadoEl.appendChild(resumoDezenasEl);
 
-  // Botão pra cadastrar cada jogo gerado direto em meus_jogos
   data.forEach((jogo, i) => {
     const btn = document.createElement('button');
     btn.textContent = `Cadastrar jogo ${i + 1}`;
@@ -480,66 +497,158 @@ function foraDaFaixa(valor, faixa) {
   return valor < faixa.min || valor > faixa.max;
 }
 
-const METRICAS_LABEL = {
-  soma: 'Soma', pares: 'Pares', primos: 'Primos', moldura: 'Moldura',
-  magicos: 'Mágicos', fibonacci: 'Fibonacci',
-  linha1: 'Linha 1', linha2: 'Linha 2', linha3: 'Linha 3', linha4: 'Linha 4', linha5: 'Linha 5',
-};
+// ---------------------------------------------------------------------
+// Grade histórica (estilo planilha, no lugar dos "chips" antigos)
+// ---------------------------------------------------------------------
+// Espera uma view/materialized view com colunas: metrica (text), valor (int),
+// quantidade (int) — quantos concursos do histórico tiveram aquele valor
+// para aquela métrica. Ajuste o nome abaixo se a view ficar com outro nome
+// depois que a migration for aplicada.
+const NOME_VIEW_DISTRIBUICAO = 'vw_distribuicao_metricas';
 
-async function carregarResumoHistorico(jogosMetricas) {
-  const statusEl = document.getElementById('resumo-metricas-status');
-  const tabelaEl = document.getElementById('resumo-metricas-tabela');
-  const repetidasEl = document.getElementById('resumo-repetidas');
+const CATEGORIAS_GRADE = [
+  { chave: 'primos',    titulo: 'PRIMOS',    corHeader: '#22b6d9', corValor: '#d7f2fa', valores: [1,2,3,4,5,6,7,8,9] },
+  { chave: 'moldura',   titulo: 'MOLDURA',   corHeader: '#a8601f', corValor: '#f0d9c4', valores: [5,6,7,8,9,10,11,12,13] },
+  { chave: 'magicos',   titulo: 'MÁGICOS',   corHeader: '#d24fd6', corValor: '#f6d9f7', valores: [1,2,3,4,5,6,7,8,9] },
+  { chave: 'fibonacci', titulo: 'FIBONACCI', corHeader: '#f2a900', corValor: '#fdecc8', valores: [1,2,3,4,5,6,7] },
+  { chave: 'linha1',    titulo: 'LINHA 1',   corHeader: '#1f3864', corValor: '#cfe2f3', valores: [1,2,3,4,5] },
+  { chave: 'linha2',    titulo: 'LINHA 2',   corHeader: '#1f3864', corValor: '#cfe2f3', valores: [1,2,3,4,5] },
+  { chave: 'linha3',    titulo: 'LINHA 3',   corHeader: '#1f3864', corValor: '#cfe2f3', valores: [1,2,3,4,5] },
+  { chave: 'linha4',    titulo: 'LINHA 4',   corHeader: '#1f3864', corValor: '#cfe2f3', valores: [1,2,3,4,5] },
+  { chave: 'linha5',    titulo: 'LINHA 5',   corHeader: '#1f3864', corValor: '#cfe2f3', valores: [1,2,3,4,5] },
+];
+const CATEGORIA_REPETIDAS = { chave: 'repetidas', titulo: 'REPETIDAS', corHeader: '#cc0000', valores: Array.from({length:12}, (_, i) => i + 4) }; // 4..15
 
-  let faixas;
-  try {
-    faixas = await obterFaixasAceitaveis();
-  } catch (e) {
-    statusEl.innerHTML = `<span class="msg-erro">Erro ao carregar faixas históricas: ${e.message}</span>`;
-    return;
-  }
-  statusEl.textContent = '';
-
-  if (jogosMetricas.length === 0) {
-    tabelaEl.innerHTML = '<p style="color:#888;">Nenhum jogo cadastrado ainda.</p>';
-    repetidasEl.innerHTML = '<p style="color:#888; font-size:13px;">—</p>';
-    return;
-  }
-
-  const METRICAS_PRINCIPAIS = ['soma', 'pares', 'primos', 'moldura', 'magicos', 'fibonacci', 'linha1', 'linha2', 'linha3', 'linha4', 'linha5'];
-
-  let html = '<table><thead><tr><th>Métrica</th><th>Faixa aceitável</th><th>Jogos fora da faixa</th></tr></thead><tbody>';
-  METRICAS_PRINCIPAIS.forEach((met) => {
-    const faixa = faixas[met];
-    const foraDesses = jogosMetricas.filter((j) => foraDaFaixa(j[met], faixa));
-    html += `<tr>
-      <td>${METRICAS_LABEL[met]}</td>
-      <td>${faixa ? `${faixa.min}–${faixa.max}` : '—'}</td>
-      <td>${
-        foraDesses.length === 0
-          ? '<span style="color:#888;">Nenhum</span>'
-          : foraDesses.map((j) => `<span class="chip-jogo-fora">${j.nome} (${j[met]})</span>`).join(' ')
-      }</td>
-    </tr>`;
-  });
-  html += '</tbody></table>';
-  tabelaEl.innerHTML = html;
-
-  // Painel da direita: repetidas em relação ao último concurso
-  const faixaRep = faixas.repetidas;
-  const foraRep = jogosMetricas.filter((j) => foraDaFaixa(j.repetidas, faixaRep));
-  repetidasEl.innerHTML = `
-    <p style="font-size:12px; color:#666;">Faixa aceitável: <strong>${faixaRep ? `${faixaRep.min}–${faixaRep.max}` : '—'}</strong></p>
-    ${
-      foraRep.length === 0
-        ? '<p style="color:#1a8a3a; font-size:13px;">Todos os jogos estão dentro da faixa.</p>'
-        : `<p style="font-size:13px; color:#b91c1c; font-weight:bold;">${foraRep.length} jogo(s) fora da faixa:</p>
-           <div>${foraRep
-             .map((j) => `<span class="chip-jogo-fora">${j.nome} (${j.repetidas} repetida${j.repetidas === 1 ? '' : 's'})</span>`)
-             .join(' ')}</div>`
-    }
-  `;
+function tierClasse(qtd, maxDaLinha) {
+  if (!qtd) return 'tier-zero';
+  if (maxDaLinha <= 0) return 'tier-zero';
+  const proporcao = qtd / maxDaLinha;
+  if (proporcao < 0.15) return 'tier-baixo';
+  if (proporcao < 0.5) return 'tier-medio';
+  return 'tier-alto';
 }
+
+async function buscarDistribuicaoHistorica() {
+  const { data, error } = await supabaseClient.from(NOME_VIEW_DISTRIBUICAO).select('*');
+  if (error) throw error;
+  const mapa = {};
+  (data ?? []).forEach((linha) => {
+    if (!mapa[linha.metrica]) mapa[linha.metrica] = {};
+    mapa[linha.metrica][linha.valor] = linha.quantidade;
+  });
+  return mapa;
+}
+
+function renderGradeCategoria(cfg, distMap, jogosMetricas) {
+  const linhaMetrica = distMap[cfg.chave] ?? {};
+  const max = Math.max(0, ...cfg.valores.map((v) => linhaMetrica[v] ?? 0));
+
+  const celulasValor = cfg.valores.map((v) => `<th style="background:${cfg.corValor};">${v}</th>`).join('');
+  const celulasQtd = cfg.valores
+    .map((v) => {
+      const qtd = linhaMetrica[v] ?? 0;
+      const classe = tierClasse(qtd, max);
+      const temJogo = jogosMetricas.some((j) => j[cfg.chave] === v);
+      return `<td class="${classe}${temJogo ? ' marcado' : ''}" title="${temJogo ? 'Você tem jogo(s) com esse valor' : ''}">${qtd}</td>`;
+    })
+    .join('');
+
+  return `
+    <div class="grade-bloco">
+      <table class="tabela-grade">
+        <tr><th class="titulo-categoria" colspan="${cfg.valores.length}" style="background:${cfg.corHeader};">${cfg.titulo}</th></tr>
+        <tr>${celulasValor}</tr>
+        <tr>${celulasQtd}</tr>
+      </table>
+    </div>`;
+}
+
+function renderGradeRepetidas(distMap, jogosMetricas) {
+  const linhaMetrica = distMap.repetidas ?? {};
+  const valores = CATEGORIA_REPETIDAS.valores;
+  const max = Math.max(0, ...valores.map((v) => linhaMetrica[v] ?? 0));
+
+  const linhas = valores
+    .map((v) => {
+      const qtd = linhaMetrica[v] ?? 0;
+      const classe = tierClasse(qtd, max);
+      const temJogo = jogosMetricas.some((j) => j.repetidas === v);
+      return `<tr>
+        <td class="rotulo">${String(v).padStart(2, '0')}</td>
+        <td class="${classe}${temJogo ? ' marcado' : ''}" title="${temJogo ? 'Você tem jogo(s) com esse valor' : ''}">${qtd}</td>
+      </tr>`;
+    })
+    .join('');
+
+  return `
+    <div class="grade-bloco">
+      <table class="tabela-grade tabela-grade-vertical">
+        <tr><th class="titulo-categoria" colspan="2" style="background:${CATEGORIA_REPETIDAS.corHeader};">${CATEGORIA_REPETIDAS.titulo}</th></tr>
+        ${linhas}
+      </table>
+    </div>`;
+}
+
+function renderAlertaMetricasRaras(distMap, jogosMetricas) {
+  const alertaEl = document.getElementById('grade-alerta');
+  const alertas = [];
+
+  jogosMetricas.forEach((jogo) => {
+    const metricasRaras = [];
+    [...CATEGORIAS_GRADE, CATEGORIA_REPETIDAS].forEach((cfg) => {
+      const valor = jogo[cfg.chave];
+      if (valor === null || valor === undefined) return;
+      const linhaMetrica = distMap[cfg.chave] ?? {};
+      const max = Math.max(0, ...cfg.valores.map((v) => linhaMetrica[v] ?? 0));
+      const classe = tierClasse(linhaMetrica[valor] ?? 0, max);
+      if (classe === 'tier-baixo' || classe === 'tier-zero') {
+        metricasRaras.push(`${cfg.titulo} = ${valor}`);
+      }
+    });
+    if (metricasRaras.length > 0) {
+      alertas.push({ nome: jogo.nome, metricasRaras });
+    }
+  });
+
+  if (alertas.length === 0) {
+    alertaEl.innerHTML = '';
+    return;
+  }
+
+  alertaEl.innerHTML = `
+    <div class="caixa-alerta">
+      <div class="titulo">⚠ ${alertas.length} jogo(s) com valores raros no histórico</div>
+      <div class="corpo">
+        <ul>
+          ${alertas.map((a) => `<li><strong>${a.nome}</strong>: ${a.metricasRaras.join(', ')}</li>`).join('')}
+        </ul>
+      </div>
+    </div>`;
+}
+
+async function carregarGradeHistorica(jogosMetricas) {
+  const statusEl = document.getElementById('grade-historico-status');
+  const containerEl = document.getElementById('grade-historico');
+
+  let distMap;
+  try {
+    distMap = await buscarDistribuicaoHistorica();
+  } catch (e) {
+    statusEl.innerHTML = `<span class="msg-erro">Não consegui carregar a distribuição histórica (view "${NOME_VIEW_DISTRIBUICAO}"): ${e.message}. Assim que a materialized view estiver criada, essa grade aparece aqui.</span>`;
+    containerEl.innerHTML = '';
+    document.getElementById('grade-alerta').innerHTML = '';
+    return;
+  }
+
+  statusEl.textContent = '';
+  containerEl.innerHTML =
+    CATEGORIAS_GRADE.map((cfg) => renderGradeCategoria(cfg, distMap, jogosMetricas)).join('') +
+    renderGradeRepetidas(distMap, jogosMetricas);
+
+  renderAlertaMetricasRaras(distMap, jogosMetricas);
+}
+
+let _ultimosJogosCarregados = [];
 
 async function carregarMeusJogos() {
   const statusEl = document.getElementById('meus-jogos-status');
@@ -557,14 +666,19 @@ async function carregarMeusJogos() {
   }
 
   statusEl.textContent = '';
+  _ultimosJogosCarregados = data ?? [];
 
-  await carregarResumoHistorico(data ?? []);
+  await carregarGradeHistorica(_ultimosJogosCarregados);
 
   if (!data || data.length === 0) {
     tabelaEl.innerHTML = '<p style="color:#888;">Nenhum jogo cadastrado ainda.</p>';
     return;
   }
 
+  // Observação: as colunas Primos/Repetidas aqui embaixo ainda usam a view
+  // "faixas_aceitaveis" pra colorir fora/dentro — se ela continuar com o
+  // bug de faixa null-null, vale trocar essa fonte também pela mesma lógica
+  // nova (concursos + categorias_numeros) usada na grade acima.
   let faixas = {};
   try {
     faixas = await obterFaixasAceitaveis();
@@ -582,7 +696,7 @@ async function carregarMeusJogos() {
     <th>Nome</th><th>Status</th><th>Dezenas</th>
     <th>Par</th><th>Ímp</th><th>Soma</th><th>Rep</th>
     <th>Prim</th><th>Mo</th><th>Mag</th><th>Fibo</th>
-    <th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>L5</th><th></th>
+    <th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>L5</th><th></th><th></th>
   </tr></thead><tbody>`;
 
   data.forEach((jogo) => {
@@ -590,7 +704,7 @@ async function carregarMeusJogos() {
     const dezenasOrdenadas = [...jogo.dezenas].sort((a, b) => a - b);
     const dezenasFormatadas = dezenasOrdenadas.map((d) => String(d).padStart(2, '0')).join(' ');
 
-    html += `<tr>
+    html += `<tr data-id="${jogo.id}">
       <td>${jogo.nome ?? '—'}</td>
       <td>${badgeStatus(jogo.status)}</td>
       <td>${chipsDezenas(dezenasOrdenadas)}</td>
@@ -608,6 +722,7 @@ async function carregarMeusJogos() {
       ${celulaMetrica(jogo.linha4, 'linha4')}
       ${celulaMetrica(jogo.linha5, 'linha5')}
       <td><button class="acao secundario copiar-dezenas" data-dezenas="${dezenasFormatadas}">Copiar</button></td>
+      <td><button class="acao perigo excluir-jogo" data-id="${jogo.id}" data-nome="${jogo.nome ?? 'este jogo'}">Excluir</button></td>
     </tr>`;
   });
 
@@ -621,7 +736,46 @@ async function carregarMeusJogos() {
       setTimeout(() => (btn.textContent = 'Copiar'), 1500);
     });
   });
+
+  tabelaEl.querySelectorAll('.excluir-jogo').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const nome = btn.dataset.nome;
+      if (!confirm(`Excluir "${nome}"? Essa ação não pode ser desfeita.`)) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Excluindo…';
+
+      const { error: erroExcluir } = await supabaseClient.from('meus_jogos').delete().eq('id', id);
+      if (erroExcluir) {
+        alert('Erro ao excluir: ' + erroExcluir.message);
+        btn.disabled = false;
+        btn.textContent = 'Excluir';
+      } else {
+        carregarMeusJogos();
+      }
+    });
+  });
 }
+
+// Botão "Copiar todos" — copia as dezenas de todos os jogos cadastrados,
+// uma linha por jogo, com as 15 dezenas separadas por TAB. Assim, ao colar
+// no Excel/Sheets, cada dezena cai numa coluna diferente automaticamente.
+document.getElementById('btn-copiar-todos').addEventListener('click', async (ev) => {
+  const btn = ev.currentTarget;
+  if (!_ultimosJogosCarregados || _ultimosJogosCarregados.length === 0) {
+    alert('Não há jogos cadastrados para copiar.');
+    return;
+  }
+  const texto = _ultimosJogosCarregados
+    .map((jogo) => [...jogo.dezenas].sort((a, b) => a - b).map((d) => String(d).padStart(2, '0')).join('\t'))
+    .join('\n');
+
+  await navigator.clipboard.writeText(texto);
+  const original = btn.textContent;
+  btn.textContent = 'Copiado ✓';
+  setTimeout(() => (btn.textContent = original), 1500);
+});
 
 // ---------------------------------------------------------------------
 // Aba Conferência
@@ -642,17 +796,10 @@ async function carregarConferencia() {
 // ---------------------------------------------------------------------
 // Aba Análise — últimos 20 concursos
 // ---------------------------------------------------------------------
-function chipsDezenas(lista) {
-  if (!lista || lista.length === 0) return '<span style="color:#bbb;">—</span>';
-  return lista.map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`).join(' ');
-}
-
 async function carregarAnalise() {
   const statusEl = document.getElementById('analise-status');
   const tabelaEl = document.getElementById('analise-tabela');
 
-  // 1) Categorias (primos, fibonacci, moldura, magicos, etc.) — tabela genérica
-  //    categoria/dezena, agrupamos num mapa categoria -> Set de dezenas.
   const { data: categoriasRaw, error: erroCategorias } = await supabaseClient
     .from('categorias_numeros')
     .select('*');
@@ -668,11 +815,8 @@ async function carregarAnalise() {
     mapaCategorias[linha.categoria].add(linha.dezena);
   });
 
-  // categorias que queremos destacar na tabela, na ordem pedida
   const CATEGORIAS_EXIBIDAS = ['primos', 'fibonacci', 'moldura', 'magicos'];
 
-  // 2) Últimos 21 concursos (20 + 1 extra só pra calcular a repetição do
-  //    mais antigo dos 20 em relação ao concurso anterior a ele).
   const { data: concursosDesc, error: erroConcursos } = await supabaseClient
     .from('concursos')
     .select('concurso, data_sorteio, dezenas')
@@ -689,7 +833,6 @@ async function carregarAnalise() {
     return;
   }
 
-  // ordem crescente pra comparar cada concurso com o imediatamente anterior
   const concursosAsc = [...concursosDesc].reverse();
 
   const linhas = [];
@@ -711,8 +854,6 @@ async function carregarAnalise() {
     linhas.push({ atual, repetidas, porCategoria, linhasVolante });
   }
 
-  // mostrar do concurso mais recente pro mais antigo, ordenando pela data
-  // (não só pelo número do concurso, pra ficar à prova de qualquer furo na numeração)
   linhas.sort((a, b) => new Date(b.atual.data_sorteio) - new Date(a.atual.data_sorteio));
 
   let html = `<table>
