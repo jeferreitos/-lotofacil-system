@@ -114,6 +114,21 @@
   .badge-jogado { background: #666; }
   .badge-outro { background: #999; }
 
+  .tabela-metricas { font-size: 12px; }
+  .tabela-metricas th, .tabela-metricas td { text-align: center; padding: 4px 6px; }
+  .tabela-metricas td.fora { background: #fde2e2; color: #b91c1c; font-weight: bold; }
+  .tabela-metricas td.dentro { background: #eafaf0; }
+  .chip-jogo-fora {
+    display: inline-block;
+    background: #fde2e2;
+    color: #b91c1c;
+    border: 1px solid #f3b4b4;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: 2px;
+    font-size: 12px;
+  }
+
   .matriz-atraso {
     width: 100%;
     border-collapse: collapse;
@@ -189,9 +204,26 @@
       <div id="cadastrar-status"></div>
     </div>
     <div class="cartao">
+      <h2>Resumo — comparação com o histórico</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Faixa aceitável = percentil 10-90 de cada métrica em todo o histórico de concursos.
+        Jogos fora dessa faixa em alguma métrica aparecem destacados aqui e na tabela abaixo.
+      </p>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="flex:2; min-width:280px;">
+          <div id="resumo-metricas-status" class="carregando">Carregando…</div>
+          <div id="resumo-metricas-tabela"></div>
+        </div>
+        <div style="flex:1; min-width:220px; border-left:1px solid #eee; padding-left:16px;">
+          <h3 style="margin:0 0 8px; font-size:14px;">Repetidas do último concurso</h3>
+          <div id="resumo-repetidas"></div>
+        </div>
+      </div>
+    </div>
+    <div class="cartao">
       <h2>Jogos cadastrados</h2>
       <div id="meus-jogos-status" class="carregando">Carregando…</div>
-      <div id="meus-jogos-tabela"></div>
+      <div id="meus-jogos-tabela" style="overflow-x:auto;"></div>
     </div>
   </section>
 
@@ -430,13 +462,93 @@ document.getElementById('btn-cadastrar-jogo').addEventListener('click', async ()
   }
 });
 
+let _faixasCache = null;
+async function obterFaixasAceitaveis() {
+  if (_faixasCache) return _faixasCache;
+  const { data, error } = await supabaseClient.from('faixas_aceitaveis').select('*');
+  if (error) throw error;
+  const mapa = {};
+  (data ?? []).forEach((f) => {
+    mapa[f.metrica] = { min: f.min, max: f.max };
+  });
+  _faixasCache = mapa;
+  return mapa;
+}
+
+function foraDaFaixa(valor, faixa) {
+  if (!faixa || valor === null || valor === undefined) return false;
+  return valor < faixa.min || valor > faixa.max;
+}
+
+const METRICAS_LABEL = {
+  soma: 'Soma', pares: 'Pares', primos: 'Primos', moldura: 'Moldura',
+  magicos: 'Mágicos', fibonacci: 'Fibonacci',
+  linha1: 'Linha 1', linha2: 'Linha 2', linha3: 'Linha 3', linha4: 'Linha 4', linha5: 'Linha 5',
+};
+
+async function carregarResumoHistorico(jogosMetricas) {
+  const statusEl = document.getElementById('resumo-metricas-status');
+  const tabelaEl = document.getElementById('resumo-metricas-tabela');
+  const repetidasEl = document.getElementById('resumo-repetidas');
+
+  let faixas;
+  try {
+    faixas = await obterFaixasAceitaveis();
+  } catch (e) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao carregar faixas históricas: ${e.message}</span>`;
+    return;
+  }
+  statusEl.textContent = '';
+
+  if (jogosMetricas.length === 0) {
+    tabelaEl.innerHTML = '<p style="color:#888;">Nenhum jogo cadastrado ainda.</p>';
+    repetidasEl.innerHTML = '<p style="color:#888; font-size:13px;">—</p>';
+    return;
+  }
+
+  const METRICAS_PRINCIPAIS = ['soma', 'pares', 'primos', 'moldura', 'magicos', 'fibonacci', 'linha1', 'linha2', 'linha3', 'linha4', 'linha5'];
+
+  let html = '<table><thead><tr><th>Métrica</th><th>Faixa aceitável</th><th>Jogos fora da faixa</th></tr></thead><tbody>';
+  METRICAS_PRINCIPAIS.forEach((met) => {
+    const faixa = faixas[met];
+    const foraDesses = jogosMetricas.filter((j) => foraDaFaixa(j[met], faixa));
+    html += `<tr>
+      <td>${METRICAS_LABEL[met]}</td>
+      <td>${faixa ? `${faixa.min}–${faixa.max}` : '—'}</td>
+      <td>${
+        foraDesses.length === 0
+          ? '<span style="color:#888;">Nenhum</span>'
+          : foraDesses.map((j) => `<span class="chip-jogo-fora">${j.nome} (${j[met]})</span>`).join(' ')
+      }</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  tabelaEl.innerHTML = html;
+
+  // Painel da direita: repetidas em relação ao último concurso
+  const faixaRep = faixas.repetidas;
+  const foraRep = jogosMetricas.filter((j) => foraDaFaixa(j.repetidas, faixaRep));
+  repetidasEl.innerHTML = `
+    <p style="font-size:12px; color:#666;">Faixa aceitável: <strong>${faixaRep ? `${faixaRep.min}–${faixaRep.max}` : '—'}</strong></p>
+    ${
+      foraRep.length === 0
+        ? '<p style="color:#1a8a3a; font-size:13px;">Todos os jogos estão dentro da faixa.</p>'
+        : `<p style="font-size:13px; color:#b91c1c; font-weight:bold;">${foraRep.length} jogo(s) fora da faixa:</p>
+           <div>${foraRep
+             .map((j) => `<span class="chip-jogo-fora">${j.nome} (${j.repetidas} repetida${j.repetidas === 1 ? '' : 's'})</span>`)
+             .join(' ')}</div>`
+    }
+  `;
+}
+
 async function carregarMeusJogos() {
   const statusEl = document.getElementById('meus-jogos-status');
   const tabelaEl = document.getElementById('meus-jogos-tabela');
 
   const { data, error } = await supabaseClient
-    .from('export_jogos_texto')
-    .select('*');
+    .from('meus_jogos_metricas')
+    .select('*')
+    .order('id', { ascending: true });
 
   if (error) {
     statusEl.textContent = 'Erro ao carregar: ' + error.message;
@@ -446,20 +558,59 @@ async function carregarMeusJogos() {
 
   statusEl.textContent = '';
 
+  await carregarResumoHistorico(data ?? []);
+
   if (!data || data.length === 0) {
     tabelaEl.innerHTML = '<p style="color:#888;">Nenhum jogo cadastrado ainda.</p>';
     return;
   }
 
-  let html = '<table><thead><tr><th>Nome</th><th>Dezenas</th><th>Status</th><th></th></tr></thead><tbody>';
+  let faixas = {};
+  try {
+    faixas = await obterFaixasAceitaveis();
+  } catch (e) {
+    // segue sem destaque de cor se der erro ao buscar as faixas
+  }
+
+  const celulaMetrica = (valor, metrica) => {
+    const faixa = faixas[metrica];
+    const classe = foraDaFaixa(valor, faixa) ? 'fora' : 'dentro';
+    return `<td class="${classe}">${valor ?? '—'}</td>`;
+  };
+
+  let html = `<table class="tabela-metricas"><thead><tr>
+    <th>Nome</th><th>Status</th><th>Dezenas</th>
+    <th>Par</th><th>Ímp</th><th>Soma</th><th>Rep</th>
+    <th>Prim</th><th>Mo</th><th>Mag</th><th>Fibo</th>
+    <th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>L5</th><th></th>
+  </tr></thead><tbody>`;
+
   data.forEach((jogo) => {
+    const impares = 15 - (jogo.pares ?? 0);
+    const dezenasOrdenadas = [...jogo.dezenas].sort((a, b) => a - b);
+    const dezenasFormatadas = dezenasOrdenadas.map((d) => String(d).padStart(2, '0')).join(' ');
+
     html += `<tr>
       <td>${jogo.nome ?? '—'}</td>
-      <td style="font-family:monospace;">${jogo.dezenas_formatadas ?? '—'}</td>
       <td>${badgeStatus(jogo.status)}</td>
-      <td><button class="acao secundario copiar-dezenas" data-dezenas="${jogo.dezenas_formatadas ?? ''}">Copiar</button></td>
+      <td>${chipsDezenas(dezenasOrdenadas)}</td>
+      ${celulaMetrica(jogo.pares, 'pares')}
+      <td>${impares}</td>
+      ${celulaMetrica(jogo.soma, 'soma')}
+      <td>${jogo.repetidas ?? '—'}</td>
+      ${celulaMetrica(jogo.primos, 'primos')}
+      ${celulaMetrica(jogo.moldura, 'moldura')}
+      ${celulaMetrica(jogo.magicos, 'magicos')}
+      ${celulaMetrica(jogo.fibonacci, 'fibonacci')}
+      ${celulaMetrica(jogo.linha1, 'linha1')}
+      ${celulaMetrica(jogo.linha2, 'linha2')}
+      ${celulaMetrica(jogo.linha3, 'linha3')}
+      ${celulaMetrica(jogo.linha4, 'linha4')}
+      ${celulaMetrica(jogo.linha5, 'linha5')}
+      <td><button class="acao secundario copiar-dezenas" data-dezenas="${dezenasFormatadas}">Copiar</button></td>
     </tr>`;
   });
+
   html += '</tbody></table>';
   tabelaEl.innerHTML = html;
 
