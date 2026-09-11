@@ -113,6 +113,23 @@
   .badge-ativo { background: var(--verde); }
   .badge-jogado { background: #666; }
   .badge-outro { background: #999; }
+
+  .matriz-atraso {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    text-align: center;
+  }
+  .matriz-atraso th, .matriz-atraso td {
+    border: 1px solid #fff;
+    padding: 4px 2px;
+    min-width: 26px;
+  }
+  .matriz-atraso thead th.cab-dezena { background: #f5c400; color: #222; }
+  .matriz-atraso thead th.cab-atraso { background: #1560bd; color: #fff; }
+  .matriz-atraso td.col-concurso { background: #e07b1f; color: #fff; font-weight: bold; }
+  .matriz-atraso td.cel-on { background: #3aa0e0; color: #fff; font-weight: bold; }
+  .matriz-atraso td.cel-off { background: #fff; }
 </style>
 </head>
 <body>
@@ -198,6 +215,16 @@
       </p>
       <div id="analise-status" class="carregando">Carregando…</div>
       <div id="analise-tabela" style="overflow-x:auto;"></div>
+    </div>
+
+    <div class="cartao">
+      <h2>Atraso por dezena (últimos 20 concursos)</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Atraso = quantos concursos se passaram desde a última vez que a dezena saiu. As células
+        azuis marcam em qual concurso cada dezena apareceu.
+      </p>
+      <div id="matriz-status" class="carregando">Carregando…</div>
+      <div id="matriz-tabela" style="overflow-x:auto;"></div>
     </div>
   </section>
 
@@ -552,6 +579,67 @@ async function carregarAnalise() {
 }
 
 // ---------------------------------------------------------------------
+// Aba Análise — matriz de atraso por dezena
+// ---------------------------------------------------------------------
+async function carregarMatrizAtraso() {
+  const statusEl = document.getElementById('matriz-status');
+  const containerEl = document.getElementById('matriz-tabela');
+
+  const [
+    { data: atrasoData, error: erroAtraso },
+    { data: concursosData, error: erroConcursos },
+  ] = await Promise.all([
+    supabaseClient.from('atraso_dezenas_individual').select('*').order('dezena'),
+    supabaseClient
+      .from('concursos')
+      .select('concurso, dezenas')
+      .order('concurso', { ascending: false })
+      .limit(20),
+  ]);
+
+  if (erroAtraso) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao carregar atraso: ${erroAtraso.message}</span>`;
+    return;
+  }
+  if (erroConcursos) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao carregar concursos: ${erroConcursos.message}</span>`;
+    return;
+  }
+
+  const mapaAtraso = {};
+  (atrasoData ?? []).forEach((linha) => {
+    mapaAtraso[linha.dezena] = linha.atraso;
+  });
+
+  const dezenas = Array.from({ length: 25 }, (_, i) => i + 1);
+
+  let html = '<table class="matriz-atraso"><thead>';
+  html +=
+    '<tr><th></th>' +
+    dezenas.map((d) => `<th class="cab-dezena">${String(d).padStart(2, '0')}</th>`).join('') +
+    '</tr>';
+  html +=
+    '<tr><th>Atraso</th>' +
+    dezenas.map((d) => `<th class="cab-atraso">${mapaAtraso[d] ?? '—'}</th>`).join('') +
+    '</tr>';
+  html += '</thead><tbody>';
+
+  (concursosData ?? []).forEach((c) => {
+    html += `<tr><td class="col-concurso">${c.concurso}</td>`;
+    dezenas.forEach((d) => {
+      html += c.dezenas.includes(d)
+        ? `<td class="cel-on">${String(d).padStart(2, '0')}</td>`
+        : '<td class="cel-off"></td>';
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  statusEl.textContent = '';
+  containerEl.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------
 // Carga inicial
 // ---------------------------------------------------------------------
 carregarCiclos();
@@ -559,6 +647,7 @@ carregarDuracaoCiclos();
 carregarMeusJogos();
 carregarConferencia();
 carregarAnalise();
+carregarMatrizAtraso();
 </script>
 
 </body>
