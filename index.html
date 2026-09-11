@@ -148,7 +148,7 @@
 
   /* ---------- Grade histórica (estilo planilha) ---------- */
   .grade-container { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
-  .grade-secao-superior { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; }
+  .grade-secao-superior { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
   .grade-coluna-esquerda { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-width: 0; }
   .grade-coluna-direita { flex: 0 0 auto; }
   .grade-linha-dupla, .grade-linha-meio, .grade-linha-baixo, .grade-linha-pares, .grade-linha-soma { display: flex; flex-wrap: wrap; gap: 14px; }
@@ -248,6 +248,7 @@
     <div class="cartao">
       <h2>
         Jogos cadastrados
+        <button id="btn-excluir-selecionados" class="acao perigo" style="float:right; font-size:12px; padding:6px 10px; margin-left:8px;" disabled>Excluir selecionados (0)</button>
         <button id="btn-copiar-todos" class="acao secundario" style="float:right; font-size:12px; padding:6px 10px;">Copiar todos</button>
       </h2>
       <div id="meus-jogos-status" class="carregando">Carregando…</div>
@@ -733,6 +734,7 @@ async function carregarGradeHistorica(jogosMetricas) {
 }
 
 let _ultimosJogosCarregados = [];
+let _jogosSelecionados = new Set();
 
 async function carregarMeusJogos() {
   const statusEl = document.getElementById('meus-jogos-status');
@@ -751,6 +753,8 @@ async function carregarMeusJogos() {
 
   statusEl.textContent = '';
   _ultimosJogosCarregados = data ?? [];
+  _jogosSelecionados.clear();
+  atualizarBotaoExcluirSelecionados();
 
   await carregarGradeHistorica(_ultimosJogosCarregados);
 
@@ -791,6 +795,7 @@ async function carregarMeusJogos() {
   };
 
   let html = `<table class="tabela-metricas"><thead><tr>
+    <th><input type="checkbox" id="chk-todos-jogos" /></th>
     <th>Nome</th><th>Status</th><th>Dezenas</th>
     <th>Par</th><th>Ímp</th><th>Soma</th><th>Rep</th>
     <th>Prim</th><th>Mo</th><th>Mag</th><th>Fibo</th>
@@ -803,6 +808,7 @@ async function carregarMeusJogos() {
     const dezenasFormatadas = dezenasOrdenadas.map((d) => String(d).padStart(2, '0')).join(' ');
 
     html += `<tr data-id="${jogo.id}">
+      <td><input type="checkbox" class="chk-jogo" data-id="${jogo.id}" /></td>
       <td>${jogo.nome ?? '—'}</td>
       <td>${badgeStatus(jogo.status)}</td>
       <td>${chipsDezenas(dezenasOrdenadas)}</td>
@@ -835,6 +841,33 @@ async function carregarMeusJogos() {
     });
   });
 
+  tabelaEl.querySelectorAll('.chk-jogo').forEach((chk) => {
+    chk.addEventListener('change', () => {
+      const id = chk.dataset.id;
+      if (chk.checked) {
+        _jogosSelecionados.add(id);
+      } else {
+        _jogosSelecionados.delete(id);
+      }
+      atualizarBotaoExcluirSelecionados();
+    });
+  });
+
+  const chkTodos = document.getElementById('chk-todos-jogos');
+  if (chkTodos) {
+    chkTodos.addEventListener('change', () => {
+      tabelaEl.querySelectorAll('.chk-jogo').forEach((chk) => {
+        chk.checked = chkTodos.checked;
+        if (chkTodos.checked) {
+          _jogosSelecionados.add(chk.dataset.id);
+        } else {
+          _jogosSelecionados.delete(chk.dataset.id);
+        }
+      });
+      atualizarBotaoExcluirSelecionados();
+    });
+  }
+
   tabelaEl.querySelectorAll('.excluir-jogo').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
@@ -844,9 +877,25 @@ async function carregarMeusJogos() {
       btn.disabled = true;
       btn.textContent = 'Excluindo…';
 
-      const { error: erroExcluir } = await supabaseClient.from('meus_jogos').delete().eq('id', id);
+      // .select() no final é essencial: é o único jeito de saber se o
+      // Supabase de fato apagou alguma linha. Se uma política de RLS
+      // (Row Level Security) estiver bloqueando o DELETE, o Supabase NÃO
+      // retorna erro — ele só devolve 0 linhas afetadas, silenciosamente,
+      // e o jogo continua lá.
+      const { data: deletados, error: erroExcluir } = await supabaseClient
+        .from('meus_jogos')
+        .delete()
+        .eq('id', id)
+        .select();
+
       if (erroExcluir) {
         alert('Erro ao excluir: ' + erroExcluir.message);
+        btn.disabled = false;
+        btn.textContent = 'Excluir';
+      } else if (!deletados || deletados.length === 0) {
+        alert(
+          'O Supabase não excluiu o jogo. Isso normalmente é causado por uma política de RLS (Row Level Security) bloqueando o DELETE na tabela "meus_jogos". Verifique as políticas dessa tabela no Supabase.'
+        );
         btn.disabled = false;
         btn.textContent = 'Excluir';
       } else {
@@ -855,6 +904,45 @@ async function carregarMeusJogos() {
     });
   });
 }
+
+function atualizarBotaoExcluirSelecionados() {
+  const btn = document.getElementById('btn-excluir-selecionados');
+  if (!btn) return;
+  const qtd = _jogosSelecionados.size;
+  btn.textContent = `Excluir selecionados (${qtd})`;
+  btn.disabled = qtd === 0;
+}
+
+document.getElementById('btn-excluir-selecionados').addEventListener('click', async () => {
+  const ids = [..._jogosSelecionados];
+  if (ids.length === 0) return;
+  if (!confirm(`Excluir ${ids.length} jogo(s) selecionado(s)? Essa ação não pode ser desfeita.`)) return;
+
+  const btn = document.getElementById('btn-excluir-selecionados');
+  btn.disabled = true;
+  btn.textContent = 'Excluindo…';
+
+  const { data: deletados, error } = await supabaseClient
+    .from('meus_jogos')
+    .delete()
+    .in('id', ids)
+    .select();
+
+  if (error) {
+    alert('Erro ao excluir: ' + error.message);
+    atualizarBotaoExcluirSelecionados();
+    return;
+  }
+
+  const qtdDeletada = deletados ? deletados.length : 0;
+  if (qtdDeletada < ids.length) {
+    alert(
+      `Apenas ${qtdDeletada} de ${ids.length} jogo(s) foram excluídos. Isso normalmente é causado por uma política de RLS (Row Level Security) bloqueando o DELETE na tabela "meus_jogos" para alguns registros.`
+    );
+  }
+
+  carregarMeusJogos();
+});
 
 // Botão "Copiar todos" — copia as dezenas de todos os jogos cadastrados,
 // uma linha por jogo, com as 15 dezenas separadas por TAB. Assim, ao colar
