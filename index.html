@@ -391,7 +391,7 @@ document.getElementById('btn-atualizar-concursos').addEventListener('click', asy
   statusEl.innerHTML = '<span class="carregando">Buscando resultado mais recente…</span>';
 
   try {
-    const resp = await fetch(`${SUPABASE_URL}/functions/v1/importar-concursos`, {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/swift-action`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
