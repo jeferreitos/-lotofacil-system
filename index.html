@@ -109,6 +109,7 @@
     margin: 1px;
     font-family: monospace;
   }
+  .dezenas-fileira { white-space: nowrap; }
   .badge-status {
     padding: 2px 8px;
     border-radius: 10px;
@@ -399,6 +400,25 @@ function chipsDezenas(lista) {
   return lista.map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`).join(' ');
 }
 
+// Igual ao chipsDezenas, mas quebra a lista em fileiras (por padrão, 5
+// dezenas por fileira) — usada na tabela "Jogos cadastrados" para mostrar
+// as 15 dezenas em 3 linhas de 5, em vez de uma linha só.
+function chipsDezenasEmFileiras(lista, porFileira = 5) {
+  if (!lista || lista.length === 0) return '<span style="color:#bbb;">—</span>';
+  const fileiras = [];
+  for (let i = 0; i < lista.length; i += porFileira) {
+    fileiras.push(lista.slice(i, i + porFileira));
+  }
+  return fileiras
+    .map(
+      (fileira) =>
+        `<div class="dezenas-fileira">${fileira
+          .map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`)
+          .join(' ')}</div>`
+    )
+    .join('');
+}
+
 // ---------------------------------------------------------------------
 // Recarrega tudo que depende da tabela "concursos". Usado tanto depois de
 // uma importação automática (API) quanto depois de um lançamento manual —
@@ -607,12 +627,6 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
     btn.style.margin = '4px';
     btn.addEventListener('click', async () => {
       const dezenas = jogo.dezenas ?? jogo.numeros ?? jogo.jogo;
-      // Não gravamos mais um número dentro do nome (ex: "#3") — a numeração
-      // sequencial exibida na tabela "Jogos cadastrados" agora é calculada
-      // na hora de exibir, com base na posição de cada jogo na lista (ver
-      // carregarMeusJogos). Assim ela sempre fica em ordem (#1, #2, #3...),
-      // se ajusta sozinha ao excluir jogos ou dar refresh, e continua a
-      // sequência certinha para qualquer jogo novo cadastrado.
       const { error: erroInsert } = await supabaseClient
         .from('meus_jogos')
         .insert({ nome: `Gerado ${new Date().toLocaleDateString('pt-BR')}`, dezenas });
@@ -911,7 +925,7 @@ async function carregarMeusJogos() {
   const { data, error } = await supabaseClient
     .from('meus_jogos_metricas')
     .select('*')
-    .order('id', { ascending: true });
+    .order('criado_em', { ascending: true });
 
   if (error) {
     statusEl.textContent = 'Erro ao carregar: ' + error.message;
@@ -964,11 +978,11 @@ async function carregarMeusJogos() {
 
   // A numeração sequencial (#1, #2, #3...) é calculada aqui, na hora de
   // montar a tabela, com base na POSIÇÃO de cada jogo na lista (que vem
-  // ordenada por id crescente, ou seja, ordem de cadastro). Não fica
-  // gravada em nenhum lugar do banco — por isso ela sempre se reorganiza
-  // sozinha: ao excluir um jogo ou dar refresh, a lista recarrega e a
-  // numeração se ajusta automaticamente; um jogo novo entra no fim e
-  // recebe o próximo número da sequência.
+  // ordenada por criado_em crescente, ou seja, ordem real de cadastro —
+  // "id" é uuid e não serve pra isso). Não fica gravada em nenhum lugar do
+  // banco — por isso ela sempre se reorganiza sozinha: ao excluir um jogo
+  // ou dar refresh, a lista recarrega e a numeração se ajusta
+  // automaticamente; um jogo novo entra no fim e recebe o próximo número.
   let html = `<table class="tabela-metricas"><thead><tr>
     <th><input type="checkbox" id="chk-todos-jogos" /></th>
     <th>#</th>
@@ -988,7 +1002,7 @@ async function carregarMeusJogos() {
       <td>${indice + 1}</td>
       <td>${jogo.nome ?? '—'}</td>
       <td>${badgeStatus(jogo.status)}</td>
-      <td>${chipsDezenas(dezenasOrdenadas)}</td>
+      <td>${chipsDezenasEmFileiras(dezenasOrdenadas)}</td>
       ${celulaMetricaRara(jogo.pares, 'pares')}
       ${celulaMetricaRara(impares, 'impares')}
       ${celulaMetrica(jogo.soma, 'soma')}
