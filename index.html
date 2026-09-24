@@ -89,7 +89,7 @@
     border: 1px solid var(--vermelho);
   }
 
-  input[type="number"], input[type="text"] {
+  input[type="number"], input[type="text"], input[type="date"] {
     padding: 6px 8px;
     border: 1px solid var(--cinza-borda);
     border-radius: 6px;
@@ -217,6 +217,26 @@
         <span id="atualizar-status"></span>
       </div>
     </div>
+
+    <div class="cartao">
+      <h2>Lançar concurso manualmente</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Use isso quando a busca automática na API estiver falhando. Informe o número do concurso,
+        a data do sorteio e as 15 dezenas sorteadas. O concurso é gravado na mesma tabela usada
+        pelos resultados importados automaticamente, então passa a valer em Ciclos, Gerar jogos,
+        Meus jogos, Conferência e Análise, do mesmo jeito que um concurso importado pela API.
+        Se você digitar de novo o número de um concurso já lançado, os dados dele são atualizados
+        (substituídos), em vez de duplicar a linha.
+      </p>
+      <div class="linha-form">
+        <input type="number" id="manual-concurso" placeholder="Nº do concurso" style="width:130px" min="1" />
+        <input type="date" id="manual-data" />
+        <input type="text" id="manual-dezenas" placeholder="15 dezenas separadas por vírgula (ex: 1,2,3,...,15)" style="flex:1; min-width:280px;" />
+        <button class="acao" id="btn-salvar-concurso-manual">Salvar concurso</button>
+      </div>
+      <div id="manual-concurso-status"></div>
+    </div>
+
     <div class="cartao">
       <h2>Dezenas atrasadas por categoria</h2>
       <div id="ciclos-status" class="carregando">Carregando…</div>
@@ -380,6 +400,20 @@ function chipsDezenas(lista) {
 }
 
 // ---------------------------------------------------------------------
+// Recarrega tudo que depende da tabela "concursos". Usado tanto depois de
+// uma importação automática (API) quanto depois de um lançamento manual —
+// assim os dois caminhos alimentam exatamente as mesmas abas.
+// ---------------------------------------------------------------------
+function recarregarDependentesDeConcursos() {
+  carregarCiclos();
+  carregarDuracaoCiclos();
+  carregarConferencia();
+  carregarAnalise();
+  carregarMatrizAtraso();
+  carregarMeusJogos();
+}
+
+// ---------------------------------------------------------------------
 // Atualizar resultados — chama a Edge Function "importar-concursos", que
 // busca o concurso mais recente na loteriascaixa-api e salva no Supabase.
 // ---------------------------------------------------------------------
@@ -410,17 +444,86 @@ document.getElementById('btn-atualizar-concursos').addEventListener('click', asy
     statusEl.innerHTML = `<span class="msg-ok">Concurso mais recente sincronizado.</span>`;
 
     // Recarrega tudo que depende da tabela "concursos"
-    carregarCiclos();
-    carregarDuracaoCiclos();
-    carregarConferencia();
-    carregarAnalise();
-    carregarMatrizAtraso();
-    carregarMeusJogos();
+    recarregarDependentesDeConcursos();
   } catch (e) {
     statusEl.innerHTML = `<span class="msg-erro">Erro ao atualizar: ${e.message}</span>`;
   } finally {
     btn.disabled = false;
   }
+});
+
+// ---------------------------------------------------------------------
+// Lançar concurso manualmente — grava direto na tabela "concursos", com
+// as mesmas colunas (concurso, data_sorteio, dezenas) que a importação
+// automática usa. Como usa upsert por "concurso", relançar o mesmo número
+// corrige o registro em vez de duplicar.
+//
+// IMPORTANTE: se "dezenas_atrasadas", "duracao_media_ciclos",
+// "meus_jogos_metricas", "vw_distribuicao_metricas" ou
+// "atraso_dezenas_individual" forem materialized views no Supabase (em vez
+// de views normais), elas só atualizam sozinhas quando algo roda
+// REFRESH MATERIALIZED VIEW — a Edge Function provavelmente já faz isso
+// depois de importar da API. Um insert manual feito direto do navegador
+// não consegue rodar esse REFRESH (exige privilégio maior que a anon key).
+// Se depois de lançar um concurso manual essas telas não mudarem, isso é
+// o motivo mais provável — nesse caso é preciso ou criar um trigger no
+// Supabase que rode o REFRESH automaticamente após INSERT/UPDATE em
+// "concursos", ou expor uma function/RPC para o front chamar.
+// ---------------------------------------------------------------------
+document.getElementById('btn-salvar-concurso-manual').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-salvar-concurso-manual');
+  const statusEl = document.getElementById('manual-concurso-status');
+
+  const concursoTexto = document.getElementById('manual-concurso').value.trim();
+  const data = document.getElementById('manual-data').value;
+  const dezenasTexto = document.getElementById('manual-dezenas').value.trim();
+
+  const concurso = parseInt(concursoTexto, 10);
+  const dezenas = dezenasTexto
+    .split(',')
+    .map((d) => parseInt(d.trim(), 10))
+    .filter((d) => !isNaN(d));
+  const dezenasUnicas = [...new Set(dezenas)];
+
+  if (!concursoTexto || isNaN(concurso) || concurso <= 0) {
+    statusEl.innerHTML = '<span class="msg-erro">Informe o número do concurso.</span>';
+    return;
+  }
+  if (!data) {
+    statusEl.innerHTML = '<span class="msg-erro">Informe a data do sorteio.</span>';
+    return;
+  }
+  if (dezenas.length !== 15 || dezenasUnicas.length !== 15) {
+    statusEl.innerHTML = `<span class="msg-erro">A Lotofácil precisa de exatamente 15 dezenas sem repetição (você digitou ${dezenas.length}, sendo ${dezenasUnicas.length} única(s)).</span>`;
+    return;
+  }
+  if (dezenas.some((d) => d < 1 || d > 25)) {
+    statusEl.innerHTML = '<span class="msg-erro">As dezenas precisam estar entre 1 e 25.</span>';
+    return;
+  }
+
+  const dezenasOrdenadas = dezenasUnicas.sort((a, b) => a - b);
+
+  btn.disabled = true;
+  statusEl.innerHTML = '<span class="carregando">Salvando…</span>';
+
+  const { error } = await supabaseClient
+    .from('concursos')
+    .upsert({ concurso, data_sorteio: data, dezenas: dezenasOrdenadas }, { onConflict: 'concurso' });
+
+  btn.disabled = false;
+
+  if (error) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao salvar: ${error.message}</span>`;
+    return;
+  }
+
+  statusEl.innerHTML = `<span class="msg-ok">Concurso ${concurso} salvo. Atualizando as outras abas…</span>`;
+  document.getElementById('manual-concurso').value = '';
+  document.getElementById('manual-data').value = '';
+  document.getElementById('manual-dezenas').value = '';
+
+  recarregarDependentesDeConcursos();
 });
 
 // ---------------------------------------------------------------------
