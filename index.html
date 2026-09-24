@@ -207,6 +207,17 @@
   <!-- ===================== CICLOS ===================== -->
   <section id="aba-ciclos" class="aba ativa">
     <div class="cartao">
+      <h2>Atualizar resultados da Lotofácil</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Busca o concurso mais recente na API e salva no banco. As abas de Ciclos, Análise,
+        Matriz de atraso e Conferência são recarregadas automaticamente depois.
+      </p>
+      <div class="linha-form">
+        <button class="acao" id="btn-atualizar-concursos">Atualizar resultados</button>
+        <span id="atualizar-status"></span>
+      </div>
+    </div>
+    <div class="cartao">
       <h2>Dezenas atrasadas por categoria</h2>
       <div id="ciclos-status" class="carregando">Carregando…</div>
       <div id="ciclos-tabela"></div>
@@ -367,6 +378,50 @@ function chipsDezenas(lista) {
   if (!lista || lista.length === 0) return '<span style="color:#bbb;">—</span>';
   return lista.map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`).join(' ');
 }
+
+// ---------------------------------------------------------------------
+// Atualizar resultados — chama a Edge Function "importar-concursos", que
+// busca o concurso mais recente na loteriascaixa-api e salva no Supabase.
+// ---------------------------------------------------------------------
+document.getElementById('btn-atualizar-concursos').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-atualizar-concursos');
+  const statusEl = document.getElementById('atualizar-status');
+
+  btn.disabled = true;
+  statusEl.innerHTML = '<span class="carregando">Buscando resultado mais recente…</span>';
+
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/importar-concursos`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ backfill: false }),
+    });
+
+    const json = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(json.error || `Erro HTTP ${resp.status}`);
+    }
+
+    statusEl.innerHTML = `<span class="msg-ok">Concurso mais recente sincronizado.</span>`;
+
+    // Recarrega tudo que depende da tabela "concursos"
+    carregarCiclos();
+    carregarDuracaoCiclos();
+    carregarConferencia();
+    carregarAnalise();
+    carregarMatrizAtraso();
+    carregarMeusJogos();
+  } catch (e) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao atualizar: ${e.message}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ---------------------------------------------------------------------
 // Aba Ciclos
@@ -554,7 +609,7 @@ const BUCKETS_SOMA = [150,160,170,180,190,200,210,220,230,240];
 
 // Categorias que entram na checagem de "valor raro" (tabela de jogos e
 // caixa de alerta). Soma fica de fora por usar faixas, não valor exato.
-const CATEGORIAS_RARIDADE = [...CATEGORIAS_GRADE, CATEGORIA_PARES, CATEGORIA_IMPARES];
+const CATEGORIAS_RARIDADE = [...CATEGORIAS_GRADE, CATEGORIA_REPETIDAS, CATEGORIA_PARES, CATEGORIA_IMPARES];
 
 function tierClasse(qtd, maxDaLinha) {
   if (!qtd) return 'tier-zero';
@@ -829,9 +884,9 @@ async function carregarMeusJogos() {
       <td>${badgeStatus(jogo.status)}</td>
       <td>${chipsDezenas(dezenasOrdenadas)}</td>
       ${celulaMetricaRara(jogo.pares, 'pares')}
-      <td>${impares}</td>
+      ${celulaMetricaRara(impares, 'impares')}
       ${celulaMetrica(jogo.soma, 'soma')}
-      <td>${jogo.repetidas ?? '—'}</td>
+      ${celulaMetricaRara(jogo.repetidas, 'repetidas')}
       ${celulaMetricaRara(jogo.primos, 'primos')}
       ${celulaMetricaRara(jogo.moldura, 'moldura')}
       ${celulaMetricaRara(jogo.magicos, 'magicos')}
