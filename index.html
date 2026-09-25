@@ -935,6 +935,18 @@ async function carregarMeusJogos() {
 
   statusEl.textContent = '';
   _ultimosJogosCarregados = data ?? [];
+
+  // A view "meus_jogos_metricas" só traz "pares" (não traz "impares"
+  // pronto). Calculamos aqui e gravamos no próprio objeto do jogo, porque
+  // tanto a grade histórica (carregarGradeHistorica → renderGradeCategoria
+  // / renderAlertaMetricasRaras) quanto a tabela abaixo precisam desse
+  // valor em jogo.impares para marcar/colorir a categoria ÍMPARES
+  // corretamente. Sem isso, jogo.impares fica "undefined" e a grade nunca
+  // marca nenhuma célula da categoria ÍMPARES.
+  _ultimosJogosCarregados.forEach((jogo) => {
+    jogo.impares = 15 - (jogo.pares ?? 0);
+  });
+
   _jogosSelecionados.clear();
   atualizarBotaoExcluirSelecionados();
 
@@ -945,8 +957,10 @@ async function carregarMeusJogos() {
     return;
   }
 
-  // Par e Soma continuam usando a faixa min/max de "faixas_aceitaveis"
-  // (não têm distribuição histórica calculada na materialized view).
+  // Soma continua usando a faixa min/max de "faixas_aceitaveis", porque a
+  // grade de cima agrupa a Soma em faixas de 10 em vez de valor exato —
+  // pra usar a mesma raridade da grade aqui, precisaria traduzir o valor
+  // exato pra sua faixa antes de comparar (não implementado ainda).
   let faixas = {};
   try {
     faixas = await obterFaixasAceitaveis();
@@ -954,9 +968,10 @@ async function carregarMeusJogos() {
     // segue sem destaque de cor se der erro ao buscar as faixas
   }
 
-  // Primos / Moldura / Mágicos / Fibonacci agora usam a MESMA lógica de
-  // raridade da grade histórica (tier-baixo / tier-zero = "raro"), em vez
-  // do min/max fixo — assim só pinta de vermelho o que é realmente raro.
+  // Par, Ímpar, Repetidas, Primos, Moldura, Mágicos, Fibonacci e agora
+  // também Linha 1 a 5 usam a MESMA lógica de raridade da grade histórica
+  // (tier-baixo / tier-zero = "raro"), pra essa tabela refletir exatamente
+  // o que a grade "Resumo — comparação com o histórico" mostra.
   let distMapTabela = null;
   try {
     distMapTabela = await buscarDistribuicaoHistorica();
@@ -993,7 +1008,7 @@ async function carregarMeusJogos() {
   </tr></thead><tbody>`;
 
   data.forEach((jogo, indice) => {
-    const impares = 15 - (jogo.pares ?? 0);
+    const impares = jogo.impares;
     const dezenasOrdenadas = [...jogo.dezenas].sort((a, b) => a - b);
     const dezenasFormatadas = dezenasOrdenadas.map((d) => String(d).padStart(2, '0')).join(' ');
 
@@ -1011,11 +1026,11 @@ async function carregarMeusJogos() {
       ${celulaMetricaRara(jogo.moldura, 'moldura')}
       ${celulaMetricaRara(jogo.magicos, 'magicos')}
       ${celulaMetricaRara(jogo.fibonacci, 'fibonacci')}
-      ${celulaMetrica(jogo.linha1, 'linha1')}
-      ${celulaMetrica(jogo.linha2, 'linha2')}
-      ${celulaMetrica(jogo.linha3, 'linha3')}
-      ${celulaMetrica(jogo.linha4, 'linha4')}
-      ${celulaMetrica(jogo.linha5, 'linha5')}
+      ${celulaMetricaRara(jogo.linha1, 'linha1')}
+      ${celulaMetricaRara(jogo.linha2, 'linha2')}
+      ${celulaMetricaRara(jogo.linha3, 'linha3')}
+      ${celulaMetricaRara(jogo.linha4, 'linha4')}
+      ${celulaMetricaRara(jogo.linha5, 'linha5')}
       <td><button class="acao secundario copiar-dezenas" data-dezenas="${dezenasFormatadas}">Copiar</button></td>
       <td><button class="acao perigo excluir-jogo" data-id="${jogo.id}" data-nome="${jogo.nome ?? 'este jogo'}">Excluir</button></td>
     </tr>`;
