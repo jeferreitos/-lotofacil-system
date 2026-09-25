@@ -123,6 +123,7 @@
   .tabela-metricas { font-size: 12px; }
   .tabela-metricas th, .tabela-metricas td { text-align: center; padding: 4px 6px; }
   .tabela-metricas td.fora { background: #fde2e2; color: #b91c1c; font-weight: bold; }
+  .tabela-metricas td.media { background: #fff3cd; color: #7a5b00; font-weight: bold; }
   .tabela-metricas td.dentro { background: #eafaf0; }
 
   /* Cabeçalho fixo: a tabela de jogos cadastrados rola dentro da própria
@@ -150,17 +151,12 @@
   /* ---------- Grade histórica (estilo planilha) ---------- */
   .grade-container { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
 
-  /* CORRIGIDO: a REPETIDAS (.grade-coluna-direita) agora usa position:absolute,
-     saindo do fluxo normal do flex. Assim a altura de .grade-secao-superior
-     passa a ser definida só pela coluna esquerda (PRIMOS/MOLDURA/MÁGICOS/
-     FIBONACCI), e o que vem depois (LINHA 1/2/3...) não fica mais empurrado
-     pra baixo pela altura da REPETIDAS. */
   .grade-secao-superior {
     position: relative;
     display: flex;
     gap: 14px;
     align-items: flex-start;
-    padding-right: 100px; /* reserva espaço pra REPETIDAS flutuar por cima; ajuste se necessário */
+    padding-right: 100px;
   }
   .grade-coluna-esquerda { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-width: 0; }
   .grade-coluna-direita {
@@ -186,6 +182,31 @@
   .caixa-alerta .titulo { background: var(--vermelho); color: #fff; font-weight: bold; padding: 6px 10px; font-size: 13px; }
   .caixa-alerta .corpo { background: #fff3cd; color: #7a1414; padding: 8px 10px; font-size: 13px; }
   .caixa-alerta .corpo ul { margin: 4px 0 0; padding-left: 18px; }
+
+  /* ---------- Ranking IFJ (aba Gerar jogos) ---------- */
+  .cartao-jogo-ifj {
+    border: 1px solid var(--cinza-borda);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .cartao-jogo-cabecalho {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .cartao-jogo-cabecalho strong { font-size: 14px; }
+  .ifj-total { font-weight: bold; font-size: 13px; margin-left: auto; }
+  .badge-categoria {
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  .tabela-ifj-detalhe { margin-top: 8px; font-size: 12px; }
+  .tabela-ifj-detalhe th, .tabela-ifj-detalhe td { padding: 3px 6px; }
 </style>
 </head>
 <body>
@@ -253,7 +274,13 @@
   <!-- ===================== GERAR JOGOS ===================== -->
   <section id="aba-gerar" class="aba">
     <div class="cartao">
-      <h2>Gerar jogos (regras do CRIVO)</h2>
+      <h2>Gerar jogos — Índice de Força do Jogo (IFJ)</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Cada jogo é pontuado de 0 a 100 com base na frequência histórica de cada critério
+        (soma, pares/ímpares, repetidas, primos, moldura, fibonacci e mágicos), calculada pela
+        function <code>gerar_jogos</code> do banco. O primeiro jogo da lista é o Jogo Âncora
+        (maior nota).
+      </p>
       <div class="linha-form">
         <label for="qtd-jogos">Quantidade:</label>
         <input type="number" id="qtd-jogos" value="5" min="1" max="50" style="width:70px" />
@@ -576,8 +603,63 @@ async function carregarDuracaoCiclos() {
 }
 
 // ---------------------------------------------------------------------
-// Aba Gerar jogos
+// Aba Gerar jogos — ranking IFJ
 // ---------------------------------------------------------------------
+// Mapeamento de categoria (devolvida pela function gerar_jogos) para cor
+// e emoji, seguindo as faixas do método: 98-100 Super Premium, 94-97
+// Premium, 90-93 Muito Bom, 85-89 Bom, 80-84 Cobertura, <80 Descartar
+// (esse último nunca deve vir da function, que já filtra por >=80).
+const CORES_CATEGORIA_IFJ = {
+  'SUPER PREMIUM': { cor: '#8a6d00', bg: '#fff3cd', emoji: '⭐' },
+  'PREMIUM':       { cor: '#1a8a3a', bg: '#eafaf0', emoji: '🟢' },
+  'MUITO BOM':     { cor: '#8a7000', bg: '#fffbe0', emoji: '🟡' },
+  'BOM':           { cor: '#b45f06', bg: '#fdf0e0', emoji: '🟠' },
+  'COBERTURA':     { cor: '#1560bd', bg: '#e3f0fb', emoji: '🔵' },
+  'DESCARTAR':     { cor: '#b91c1c', bg: '#fde2e2', emoji: '🔴' },
+};
+
+function badgeCategoriaIFJ(categoria) {
+  const cfg = CORES_CATEGORIA_IFJ[categoria] ?? { cor: '#666', bg: '#eee', emoji: '⬜' };
+  return `<span class="badge-categoria" style="background:${cfg.bg}; color:${cfg.cor};">${cfg.emoji} ${categoria ?? '—'}</span>`;
+}
+
+// Monta o ranking de jogos gerados pela function gerar_jogos, mostrando —
+// pra cada jogo — a categoria, a nota IFJ final e o detalhamento de
+// pontuação por critério (soma, pares, repetidas, primos, moldura,
+// fibonacci, mágicos), como pede o método. O primeiro jogo da lista é
+// sempre o Jogo Âncora (maior nota), já que a function ordena por
+// ifj_total decrescente.
+function renderizarRankingIFJ(jogos) {
+  return jogos
+    .map((jogo, i) => {
+      const dezenas = jogo.dezenas ?? jogo.numeros ?? jogo.jogo ?? [];
+      const dezenasOrdenadas = [...dezenas].sort((a, b) => a - b);
+      const ehAncora = i === 0;
+      return `
+        <div class="cartao-jogo-ifj" data-indice="${i}">
+          <div class="cartao-jogo-cabecalho">
+            <strong>Jogo ${i + 1}${ehAncora ? ' — Âncora' : ''}</strong>
+            ${badgeCategoriaIFJ(jogo.categoria)}
+            <span class="ifj-total">IFJ: ${jogo.ifj_total ?? '—'}/100</span>
+          </div>
+          <div>${chipsDezenas(dezenasOrdenadas)}</div>
+          <table class="tabela-ifj-detalhe">
+            <thead><tr><th>Critério</th><th>Valor</th><th>Pontos</th></tr></thead>
+            <tbody>
+              <tr><td>Soma</td><td>${jogo.valor_soma ?? '—'}</td><td>${jogo.pontos_soma ?? '—'}/20</td></tr>
+              <tr><td>Pares/Ímpares</td><td>${jogo.valor_pares ?? '—'} pares</td><td>${jogo.pontos_pares ?? '—'}/20</td></tr>
+              <tr><td>Repetidas</td><td>${jogo.valor_repetidas ?? '—'}</td><td>${jogo.pontos_repetidas ?? '—'}/20</td></tr>
+              <tr><td>Primos</td><td>${jogo.valor_primos ?? '—'}</td><td>${jogo.pontos_primos ?? '—'}/15</td></tr>
+              <tr><td>Moldura</td><td>${jogo.valor_moldura ?? '—'}</td><td>${jogo.pontos_moldura ?? '—'}/10</td></tr>
+              <tr><td>Fibonacci</td><td>${jogo.valor_fibonacci ?? '—'}</td><td>${jogo.pontos_fibonacci ?? '—'}/10</td></tr>
+              <tr><td>Mágicos</td><td>${jogo.valor_magicos ?? '—'}</td><td>${jogo.pontos_magicos ?? '—'}/5</td></tr>
+            </tbody>
+          </table>
+        </div>`;
+    })
+    .join('');
+}
+
 document.getElementById('btn-gerar').addEventListener('click', async () => {
   const qtd = parseInt(document.getElementById('qtd-jogos').value, 10) || 5;
   const statusEl = document.getElementById('gerar-status');
@@ -585,7 +667,7 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
   const botao = document.getElementById('btn-gerar');
 
   botao.disabled = true;
-  statusEl.innerHTML = '<span class="carregando">Gerando…</span>';
+  statusEl.innerHTML = '<span class="carregando">Gerando (pode levar alguns segundos)…</span>';
   resultadoEl.innerHTML = '';
 
   const { data, error } = await supabaseClient.rpc('gerar_jogos', { p_qtd: qtd });
@@ -597,8 +679,8 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
     return;
   }
 
-  statusEl.innerHTML = `<span class="msg-ok">${data.length} jogo(s) gerado(s).</span>`;
-  resultadoEl.innerHTML = montarTabelaGenerica(data);
+  statusEl.innerHTML = `<span class="msg-ok">${data.length} jogo(s) gerado(s)${data.length < qtd ? ` (você pediu ${qtd}, mas só apareceram ${data.length} jogos diversos o bastante com nota ≥ 80)` : ''}.</span>`;
+  resultadoEl.innerHTML = renderizarRankingIFJ(data);
 
   const contagemDezenas = {};
   data.forEach((jogo) => {
@@ -692,10 +774,6 @@ function foraDaFaixa(valor, faixa) {
 // ---------------------------------------------------------------------
 // Grade histórica (estilo planilha, no lugar dos "chips" antigos)
 // ---------------------------------------------------------------------
-// Espera uma view/materialized view com colunas: metrica (text), valor (int),
-// quantidade (int) — quantos concursos do histórico tiveram aquele valor
-// para aquela métrica. Ajuste o nome abaixo se a view ficar com outro nome
-// depois que a migration for aplicada.
 const NOME_VIEW_DISTRIBUICAO = 'vw_distribuicao_metricas';
 
 const CATEGORIAS_GRADE = [
@@ -714,12 +792,8 @@ const CATEGORIA_REPETIDAS = { chave: 'repetidas', titulo: 'REPETIDAS', corHeader
 const CATEGORIA_PARES   = { chave: 'pares',   titulo: 'PARES',   corHeader: '#2e7d32', corValor: '#dcedc8', valores: [3,4,5,6,7,8,9,10,11,12] };
 const CATEGORIA_IMPARES = { chave: 'impares', titulo: 'ÍMPARES', corHeader: '#6a1b9a', corValor: '#ede7f6', valores: [3,4,5,6,7,8,9,10,11,12] };
 
-// Soma agrupada em faixas de 10 (150-159, 160-169, ...), porque o valor
-// bruto varia demais (~150 a ~250) pra caber numa grade célula-a-célula.
 const BUCKETS_SOMA = [150,160,170,180,190,200,210,220,230,240];
 
-// Categorias que entram na checagem de "valor raro" (tabela de jogos e
-// caixa de alerta). Soma fica de fora por usar faixas, não valor exato.
 const CATEGORIAS_RARIDADE = [...CATEGORIAS_GRADE, CATEGORIA_REPETIDAS, CATEGORIA_PARES, CATEGORIA_IMPARES];
 
 function tierClasse(qtd, maxDaLinha) {
@@ -731,17 +805,21 @@ function tierClasse(qtd, maxDaLinha) {
   return 'tier-alto';
 }
 
-// Classifica se um valor de uma métrica é "raro" no histórico (mesma regra
-// de cor usada na grade). Retorna 'fora' quando o valor é raro/nunca ocorreu
-// (tier-baixo ou tier-zero), e 'dentro' caso contrário. Usada para colorir
-// só o que é digno de atenção na tabela "Jogos cadastrados".
+// Classifica se um valor de uma métrica é raro/mediano/comum no histórico,
+// usando a MESMA regra de 4 níveis da grade (tier-alto/tier-medio/
+// tier-baixo/tier-zero), mas devolvendo só 3 classes de CSS pra tabela
+// "Jogos cadastrados": 'dentro' (verde, = comum), 'media' (amarelo, =
+// intermediário) e 'fora' (vermelho, = raro OU nunca ocorreu) — pra bater
+// com a legenda da grade histórica (verde / amarelo / vermelho).
 function classeRaridade(chave, valor, distMap) {
   const cfg = CATEGORIAS_RARIDADE.find((c) => c.chave === chave);
   if (!cfg || valor === null || valor === undefined) return 'dentro';
   const linhaMetrica = distMap[chave] ?? {};
   const max = Math.max(0, ...cfg.valores.map((v) => linhaMetrica[v] ?? 0));
   const classe = tierClasse(linhaMetrica[valor] ?? 0, max);
-  return classe === 'tier-baixo' || classe === 'tier-zero' ? 'fora' : 'dentro';
+  if (classe === 'tier-alto') return 'dentro';
+  if (classe === 'tier-medio') return 'media';
+  return 'fora'; // tier-baixo ou tier-zero
 }
 
 async function buscarDistribuicaoHistorica() {
@@ -936,13 +1014,6 @@ async function carregarMeusJogos() {
   statusEl.textContent = '';
   _ultimosJogosCarregados = data ?? [];
 
-  // A view "meus_jogos_metricas" só traz "pares" (não traz "impares"
-  // pronto). Calculamos aqui e gravamos no próprio objeto do jogo, porque
-  // tanto a grade histórica (carregarGradeHistorica → renderGradeCategoria
-  // / renderAlertaMetricasRaras) quanto a tabela abaixo precisam desse
-  // valor em jogo.impares para marcar/colorir a categoria ÍMPARES
-  // corretamente. Sem isso, jogo.impares fica "undefined" e a grade nunca
-  // marca nenhuma célula da categoria ÍMPARES.
   _ultimosJogosCarregados.forEach((jogo) => {
     jogo.impares = 15 - (jogo.pares ?? 0);
   });
@@ -957,10 +1028,6 @@ async function carregarMeusJogos() {
     return;
   }
 
-  // Soma continua usando a faixa min/max de "faixas_aceitaveis", porque a
-  // grade de cima agrupa a Soma em faixas de 10 em vez de valor exato —
-  // pra usar a mesma raridade da grade aqui, precisaria traduzir o valor
-  // exato pra sua faixa antes de comparar (não implementado ainda).
   let faixas = {};
   try {
     faixas = await obterFaixasAceitaveis();
@@ -968,10 +1035,6 @@ async function carregarMeusJogos() {
     // segue sem destaque de cor se der erro ao buscar as faixas
   }
 
-  // Par, Ímpar, Repetidas, Primos, Moldura, Mágicos, Fibonacci e agora
-  // também Linha 1 a 5 usam a MESMA lógica de raridade da grade histórica
-  // (tier-baixo / tier-zero = "raro"), pra essa tabela refletir exatamente
-  // o que a grade "Resumo — comparação com o histórico" mostra.
   let distMapTabela = null;
   try {
     distMapTabela = await buscarDistribuicaoHistorica();
@@ -991,13 +1054,6 @@ async function carregarMeusJogos() {
     return `<td class="${classe}">${valor ?? '—'}</td>`;
   };
 
-  // A numeração sequencial (#1, #2, #3...) é calculada aqui, na hora de
-  // montar a tabela, com base na POSIÇÃO de cada jogo na lista (que vem
-  // ordenada por criado_em crescente, ou seja, ordem real de cadastro —
-  // "id" é uuid e não serve pra isso). Não fica gravada em nenhum lugar do
-  // banco — por isso ela sempre se reorganiza sozinha: ao excluir um jogo
-  // ou dar refresh, a lista recarrega e a numeração se ajusta
-  // automaticamente; um jogo novo entra no fim e recebe o próximo número.
   let html = `<table class="tabela-metricas"><thead><tr>
     <th><input type="checkbox" id="chk-todos-jogos" /></th>
     <th>#</th>
@@ -1083,11 +1139,6 @@ async function carregarMeusJogos() {
       btn.disabled = true;
       btn.textContent = 'Excluindo…';
 
-      // .select() no final é essencial: é o único jeito de saber se o
-      // Supabase de fato apagou alguma linha. Se uma política de RLS
-      // (Row Level Security) estiver bloqueando o DELETE, o Supabase NÃO
-      // retorna erro — ele só devolve 0 linhas afetadas, silenciosamente,
-      // e o jogo continua lá.
       const { data: deletados, error: erroExcluir } = await supabaseClient
         .from('meus_jogos')
         .delete()
@@ -1150,9 +1201,6 @@ document.getElementById('btn-excluir-selecionados').addEventListener('click', as
   carregarMeusJogos();
 });
 
-// Botão "Copiar todos" — copia as dezenas de todos os jogos cadastrados,
-// uma linha por jogo, com as 15 dezenas separadas por TAB. Assim, ao colar
-// no Excel/Sheets, cada dezena cai numa coluna diferente automaticamente.
 document.getElementById('btn-copiar-todos').addEventListener('click', async (ev) => {
   const btn = ev.currentTarget;
   if (!_ultimosJogosCarregados || _ultimosJogosCarregados.length === 0) {
