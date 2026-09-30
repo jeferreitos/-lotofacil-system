@@ -67,6 +67,7 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
   th { background: #fafafa; }
+  tfoot td { border-top: 2px solid #ccc; border-bottom: none; }
 
   button.acao {
     background: var(--roxo);
@@ -89,7 +90,7 @@
     border: 1px solid var(--vermelho);
   }
 
-  input[type="number"], input[type="text"], input[type="date"] {
+  input[type="number"], input[type="text"], input[type="date"], select {
     padding: 6px 8px;
     border: 1px solid var(--cinza-borda);
     border-radius: 6px;
@@ -126,8 +127,6 @@
   .tabela-metricas td.media { background: #fff3cd; color: #7a5b00; font-weight: bold; }
   .tabela-metricas td.dentro { background: #eafaf0; }
 
-  /* Cabeçalho fixo: a tabela de jogos cadastrados rola dentro da própria
-     área (altura limitada) e o cabeçalho fica grudado no topo dela. */
   #meus-jogos-tabela { max-height: 70vh; overflow: auto; }
   .tabela-metricas thead th { position: sticky; top: 0; background: #fafafa; z-index: 2; }
 
@@ -148,7 +147,6 @@
   .matriz-atraso td.cel-on { background: #3aa0e0; color: #fff; font-weight: bold; }
   .matriz-atraso td.cel-off { background: #fff; }
 
-  /* ---------- Grade histórica (estilo planilha) ---------- */
   .grade-container { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
 
   .grade-secao-superior {
@@ -174,6 +172,7 @@
   .tabela-grade td.tier-baixo { background: #f4a7a7; color: #7a1414; font-weight: bold; }
   .tabela-grade td.tier-zero  { background: #cfd8dc; color: #555; }
   .tabela-grade td.marcado    { outline: 3px solid #222; outline-offset: -2px; position: relative; }
+  .tabela-grade td.marcado-concurso { box-shadow: inset 0 0 0 3px #1560bd; position: relative; }
   .tabela-grade-vertical td.rotulo { background: #f0f0f0; font-weight: bold; }
   .grade-legenda { font-size: 12px; color: #555; margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
   .grade-legenda span { display: inline-flex; align-items: center; gap: 4px; }
@@ -183,7 +182,6 @@
   .caixa-alerta .corpo { background: #fff3cd; color: #7a1414; padding: 8px 10px; font-size: 13px; }
   .caixa-alerta .corpo ul { margin: 4px 0 0; padding-left: 18px; }
 
-  /* ---------- Ranking IFJ (aba Gerar jogos) ---------- */
   .cartao-jogo-ifj {
     border: 1px solid var(--cinza-borda);
     border-radius: 8px;
@@ -298,6 +296,7 @@
       <div class="linha-form">
         <input type="text" id="novo-jogo-nome" placeholder="Nome do jogo" />
         <input type="text" id="novo-jogo-dezenas" placeholder="Dezenas separadas por vírgula (ex: 1,2,3,4,...)" style="flex:1; min-width:220px;" />
+        <input type="number" id="novo-jogo-concurso-alvo" placeholder="Concurso alvo" style="width:150px" min="1" />
         <button class="acao" id="btn-cadastrar-jogo">Cadastrar</button>
       </div>
       <div id="cadastrar-status"></div>
@@ -306,9 +305,17 @@
       <h2>Resumo — comparação com o histórico</h2>
       <p style="font-size:12px; color:#666; margin-top:-6px;">
         Cada grade mostra, para cada valor possível da métrica, quantos dos concursos já sorteados
-        tiveram exatamente esse valor. Colunas com contorno mais grosso marcam o valor de algum dos
-        seus jogos cadastrados.
+        tiveram exatamente esse valor. Colunas com contorno preto grosso marcam o valor de algum dos
+        seus jogos cadastrados; contorno azul (interno) marca o valor de um concurso específico que
+        você escolher comparar abaixo.
       </p>
+      <div class="linha-form">
+        <label for="select-concurso-comparar">Comparar um concurso específico:</label>
+        <select id="select-concurso-comparar" style="min-width:180px;">
+          <option value="">Nenhum (só meus jogos)</option>
+        </select>
+      </div>
+      <div id="concurso-comparar-info"></div>
       <div id="grade-historico-status" class="carregando">Carregando…</div>
       <div id="grade-historico" class="grade-container"></div>
       <div class="grade-legenda">
@@ -317,6 +324,7 @@
         <span><i style="background:#f4a7a7;"></i> raro</span>
         <span><i style="background:#cfd8dc;"></i> nunca ocorreu</span>
         <span><i style="background:#fff; outline:2px solid #222; outline-offset:-1px;"></i> valor de um jogo seu</span>
+        <span><i style="background:#fff; box-shadow: inset 0 0 0 2px #1560bd;"></i> valor do concurso comparado</span>
       </div>
       <div id="grade-alerta"></div>
     </div>
@@ -326,6 +334,11 @@
         <button id="btn-excluir-selecionados" class="acao perigo" style="float:right; font-size:12px; padding:6px 10px; margin-left:8px;" disabled>Excluir selecionados (0)</button>
         <button id="btn-copiar-todos" class="acao secundario" style="float:right; font-size:12px; padding:6px 10px;">Copiar todos</button>
       </h2>
+      <div class="linha-form">
+        <label for="filtro-concurso-alvo">Filtrar por concurso alvo:</label>
+        <input type="number" id="filtro-concurso-alvo" placeholder="Nº do concurso" style="width:140px" min="1" />
+        <button class="acao secundario" id="btn-limpar-filtro-alvo">Limpar filtro</button>
+      </div>
       <div id="meus-jogos-status" class="carregando">Carregando…</div>
       <div id="meus-jogos-tabela" style="overflow-x:auto;"></div>
     </div>
@@ -335,6 +348,11 @@
   <section id="aba-conferencia" class="aba">
     <div class="cartao">
       <h2>Painel de conferência</h2>
+      <div class="linha-form">
+        <label for="filtro-concurso-conferencia">Filtrar por concurso:</label>
+        <input type="number" id="filtro-concurso-conferencia" placeholder="Nº do concurso" style="width:140px" min="1" />
+        <button class="acao secundario" id="btn-limpar-filtro-conferencia">Limpar filtro</button>
+      </div>
       <div id="conferencia-status" class="carregando">Carregando…</div>
       <div id="conferencia-tabela"></div>
     </div>
@@ -357,7 +375,8 @@
       <p style="font-size:12px; color:#666; margin-top:-6px;">
         Repetição em relação ao concurso anterior, dezenas por categoria (primos, fibonacci,
         moldura, mágicos) e distribuição por linha do volante (L1 = 01-05, L2 = 06-10,
-        L3 = 11-15, L4 = 16-20, L5 = 21-25).
+        L3 = 11-15, L4 = 16-20, L5 = 21-25). A linha "Média" no rodapé mostra a média de cada
+        coluna nesses concursos.
       </p>
       <div id="analise-status" class="carregando">Carregando…</div>
       <div id="analise-tabela" style="overflow-x:auto;"></div>
@@ -427,9 +446,6 @@ function chipsDezenas(lista) {
   return lista.map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`).join(' ');
 }
 
-// Igual ao chipsDezenas, mas quebra a lista em fileiras (por padrão, 5
-// dezenas por fileira) — usada na tabela "Jogos cadastrados" para mostrar
-// as 15 dezenas em 3 linhas de 5, em vez de uma linha só.
 function chipsDezenasEmFileiras(lista, porFileira = 5) {
   if (!lista || lista.length === 0) return '<span style="color:#bbb;">—</span>';
   const fileiras = [];
@@ -447,9 +463,42 @@ function chipsDezenasEmFileiras(lista, porFileira = 5) {
 }
 
 // ---------------------------------------------------------------------
-// Recarrega tudo que depende da tabela "concursos". Usado tanto depois de
-// uma importação automática (API) quanto depois de um lançamento manual —
-// assim os dois caminhos alimentam exatamente as mesmas abas.
+// Mapa de categorias (primos/moldura/fibonacci/magicos), cacheado. Usado
+// tanto pela Análise quanto pela comparação de concurso em Meus jogos.
+// ---------------------------------------------------------------------
+let _mapaCategoriasCache = null;
+async function buscarMapaCategorias() {
+  if (_mapaCategoriasCache) return _mapaCategoriasCache;
+  const { data, error } = await supabaseClient.from('categorias_numeros').select('*');
+  if (error) throw error;
+  const mapa = {};
+  (data ?? []).forEach((linha) => {
+    if (!mapa[linha.categoria]) mapa[linha.categoria] = new Set();
+    mapa[linha.categoria].add(linha.dezena);
+  });
+  _mapaCategoriasCache = mapa;
+  return mapa;
+}
+
+// ---------------------------------------------------------------------
+// Próximo concurso (usado como valor padrão de "concurso alvo" ao
+// cadastrar jogos, manual ou gerado pelo IFJ).
+// ---------------------------------------------------------------------
+let _proximoConcursoCache = null;
+async function obterProximoConcurso() {
+  if (_proximoConcursoCache !== null) return _proximoConcursoCache;
+  const { data, error } = await supabaseClient
+    .from('concursos')
+    .select('concurso')
+    .order('concurso', { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  _proximoConcursoCache = data[0].concurso + 1;
+  return _proximoConcursoCache;
+}
+
+// ---------------------------------------------------------------------
+// Recarrega tudo que depende da tabela "concursos".
 // ---------------------------------------------------------------------
 function recarregarDependentesDeConcursos() {
   carregarCiclos();
@@ -461,8 +510,7 @@ function recarregarDependentesDeConcursos() {
 }
 
 // ---------------------------------------------------------------------
-// Atualizar resultados — chama a Edge Function "importar-concursos", que
-// busca o concurso mais recente na loteriascaixa-api e salva no Supabase.
+// Atualizar resultados
 // ---------------------------------------------------------------------
 document.getElementById('btn-atualizar-concursos').addEventListener('click', async () => {
   const btn = document.getElementById('btn-atualizar-concursos');
@@ -489,8 +537,6 @@ document.getElementById('btn-atualizar-concursos').addEventListener('click', asy
     }
 
     statusEl.innerHTML = `<span class="msg-ok">Concurso mais recente sincronizado.</span>`;
-
-    // Recarrega tudo que depende da tabela "concursos"
     recarregarDependentesDeConcursos();
   } catch (e) {
     statusEl.innerHTML = `<span class="msg-erro">Erro ao atualizar: ${e.message}</span>`;
@@ -500,10 +546,7 @@ document.getElementById('btn-atualizar-concursos').addEventListener('click', asy
 });
 
 // ---------------------------------------------------------------------
-// Lançar concurso manualmente — grava direto na tabela "concursos", com
-// as mesmas colunas (concurso, data_sorteio, dezenas) que a importação
-// automática usa. Como usa upsert por "concurso", relançar o mesmo número
-// corrige o registro em vez de duplicar.
+// Lançar concurso manualmente
 // ---------------------------------------------------------------------
 document.getElementById('btn-salvar-concurso-manual').addEventListener('click', async () => {
   const btn = document.getElementById('btn-salvar-concurso-manual');
@@ -605,10 +648,6 @@ async function carregarDuracaoCiclos() {
 // ---------------------------------------------------------------------
 // Aba Gerar jogos — ranking IFJ
 // ---------------------------------------------------------------------
-// Mapeamento de categoria (devolvida pela function gerar_jogos) para cor
-// e emoji, seguindo as faixas do método: 98-100 Super Premium, 94-97
-// Premium, 90-93 Muito Bom, 85-89 Bom, 80-84 Cobertura, <80 Descartar
-// (esse último nunca deve vir da function, que já filtra por >=80).
 const CORES_CATEGORIA_IFJ = {
   'SUPER PREMIUM': { cor: '#8a6d00', bg: '#fff3cd', emoji: '⭐' },
   'PREMIUM':       { cor: '#1a8a3a', bg: '#eafaf0', emoji: '🟢' },
@@ -623,12 +662,6 @@ function badgeCategoriaIFJ(categoria) {
   return `<span class="badge-categoria" style="background:${cfg.bg}; color:${cfg.cor};">${cfg.emoji} ${categoria ?? '—'}</span>`;
 }
 
-// Monta o ranking de jogos gerados pela function gerar_jogos, mostrando —
-// pra cada jogo — a categoria, a nota IFJ final e o detalhamento de
-// pontuação por critério (soma, pares, repetidas, primos, moldura,
-// fibonacci, mágicos), como pede o método. O primeiro jogo da lista é
-// sempre o Jogo Âncora (maior nota), já que a function ordena por
-// ifj_total decrescente.
 function renderizarRankingIFJ(jogos) {
   return jogos
     .map((jogo, i) => {
@@ -709,9 +742,10 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
     btn.style.margin = '4px';
     btn.addEventListener('click', async () => {
       const dezenas = jogo.dezenas ?? jogo.numeros ?? jogo.jogo;
+      const concursoAlvo = await obterProximoConcurso();
       const { error: erroInsert } = await supabaseClient
         .from('meus_jogos')
-        .insert({ nome: `Gerado ${new Date().toLocaleDateString('pt-BR')}`, dezenas });
+        .insert({ nome: `Gerado ${new Date().toLocaleDateString('pt-BR')}`, dezenas, concurso_alvo: concursoAlvo });
       if (erroInsert) {
         alert('Erro ao cadastrar: ' + erroInsert.message);
       } else {
@@ -730,6 +764,7 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
 document.getElementById('btn-cadastrar-jogo').addEventListener('click', async () => {
   const nome = document.getElementById('novo-jogo-nome').value.trim() || 'Jogo manual';
   const dezenasTexto = document.getElementById('novo-jogo-dezenas').value.trim();
+  const concursoAlvoTexto = document.getElementById('novo-jogo-concurso-alvo').value.trim();
   const statusEl = document.getElementById('cadastrar-status');
 
   const dezenas = dezenasTexto
@@ -742,7 +777,9 @@ document.getElementById('btn-cadastrar-jogo').addEventListener('click', async ()
     return;
   }
 
-  const { error } = await supabaseClient.from('meus_jogos').insert({ nome, dezenas });
+  const concursoAlvo = concursoAlvoTexto ? parseInt(concursoAlvoTexto, 10) : await obterProximoConcurso();
+
+  const { error } = await supabaseClient.from('meus_jogos').insert({ nome, dezenas, concurso_alvo: concursoAlvo });
   if (error) {
     statusEl.innerHTML = `<span class="msg-erro">Erro: ${error.message}</span>`;
   } else {
@@ -751,6 +788,12 @@ document.getElementById('btn-cadastrar-jogo').addEventListener('click', async ()
     document.getElementById('novo-jogo-dezenas').value = '';
     carregarMeusJogos();
   }
+});
+
+// Pré-preenche o campo "Concurso alvo" com o próximo concurso assim que a
+// página carrega, pra não ter que digitar toda vez (ainda editável).
+obterProximoConcurso().then((prox) => {
+  if (prox) document.getElementById('novo-jogo-concurso-alvo').placeholder = `Concurso alvo (sugestão: ${prox})`;
 });
 
 let _faixasCache = null;
@@ -772,7 +815,7 @@ function foraDaFaixa(valor, faixa) {
 }
 
 // ---------------------------------------------------------------------
-// Grade histórica (estilo planilha, no lugar dos "chips" antigos)
+// Grade histórica
 // ---------------------------------------------------------------------
 const NOME_VIEW_DISTRIBUICAO = 'vw_distribuicao_metricas';
 
@@ -787,7 +830,7 @@ const CATEGORIAS_GRADE = [
   { chave: 'linha4',    titulo: 'LINHA 4',   corHeader: '#1f3864', corValor: '#cfe2f3', valores: [1,2,3,4,5] },
   { chave: 'linha5',    titulo: 'LINHA 5',   corHeader: '#1f3864', corValor: '#cfe2f3', valores: [1,2,3,4,5] },
 ];
-const CATEGORIA_REPETIDAS = { chave: 'repetidas', titulo: 'REPETIDAS', corHeader: '#cc0000', valores: Array.from({length:12}, (_, i) => i + 4) }; // 4..15
+const CATEGORIA_REPETIDAS = { chave: 'repetidas', titulo: 'REPETIDAS', corHeader: '#cc0000', valores: Array.from({length:12}, (_, i) => i + 4) };
 
 const CATEGORIA_PARES   = { chave: 'pares',   titulo: 'PARES',   corHeader: '#2e7d32', corValor: '#dcedc8', valores: [3,4,5,6,7,8,9,10,11,12] };
 const CATEGORIA_IMPARES = { chave: 'impares', titulo: 'ÍMPARES', corHeader: '#6a1b9a', corValor: '#ede7f6', valores: [3,4,5,6,7,8,9,10,11,12] };
@@ -805,12 +848,6 @@ function tierClasse(qtd, maxDaLinha) {
   return 'tier-alto';
 }
 
-// Classifica se um valor de uma métrica é raro/mediano/comum no histórico,
-// usando a MESMA regra de 4 níveis da grade (tier-alto/tier-medio/
-// tier-baixo/tier-zero), mas devolvendo só 3 classes de CSS pra tabela
-// "Jogos cadastrados": 'dentro' (verde, = comum), 'media' (amarelo, =
-// intermediário) e 'fora' (vermelho, = raro OU nunca ocorreu) — pra bater
-// com a legenda da grade histórica (verde / amarelo / vermelho).
 function classeRaridade(chave, valor, distMap) {
   const cfg = CATEGORIAS_RARIDADE.find((c) => c.chave === chave);
   if (!cfg || valor === null || valor === undefined) return 'dentro';
@@ -819,7 +856,7 @@ function classeRaridade(chave, valor, distMap) {
   const classe = tierClasse(linhaMetrica[valor] ?? 0, max);
   if (classe === 'tier-alto') return 'dentro';
   if (classe === 'tier-medio') return 'media';
-  return 'fora'; // tier-baixo ou tier-zero
+  return 'fora';
 }
 
 async function buscarDistribuicaoHistorica() {
@@ -833,6 +870,11 @@ async function buscarDistribuicaoHistorica() {
   return mapa;
 }
 
+// Concurso específico selecionado para comparação (aba Meus jogos). null
+// quando nenhum está selecionado. Lido diretamente pelas funções de
+// renderização da grade abaixo — não precisa passar como parâmetro.
+let _concursoComparadoMetricas = null;
+
 function renderGradeCategoria(cfg, distMap, jogosMetricas) {
   const linhaMetrica = distMap[cfg.chave] ?? {};
   const max = Math.max(0, ...cfg.valores.map((v) => linhaMetrica[v] ?? 0));
@@ -843,7 +885,8 @@ function renderGradeCategoria(cfg, distMap, jogosMetricas) {
       const qtd = linhaMetrica[v] ?? 0;
       const classe = tierClasse(qtd, max);
       const temJogo = jogosMetricas.some((j) => j[cfg.chave] === v);
-      return `<td class="${classe}${temJogo ? ' marcado' : ''}" title="${temJogo ? 'Você tem jogo(s) com esse valor' : ''}">${qtd}</td>`;
+      const temConcurso = _concursoComparadoMetricas && _concursoComparadoMetricas[cfg.chave] === v;
+      return `<td class="${classe}${temJogo ? ' marcado' : ''}${temConcurso ? ' marcado-concurso' : ''}" title="${temJogo ? 'Você tem jogo(s) com esse valor. ' : ''}${temConcurso ? 'Valor do concurso comparado.' : ''}">${qtd}</td>`;
     })
     .join('');
 
@@ -866,7 +909,8 @@ function renderGradeSoma(distMap, jogosMetricas) {
     const qtd = linhaMetrica[v] ?? 0;
     const classe = tierClasse(qtd, max);
     const temJogo = jogosMetricas.some((j) => Math.floor((j.soma ?? -1) / 10) * 10 === v);
-    return `<td class="${classe}${temJogo ? ' marcado' : ''}" title="${temJogo ? 'Você tem jogo(s) nessa faixa' : ''}">${qtd}</td>`;
+    const temConcurso = _concursoComparadoMetricas && Math.floor((_concursoComparadoMetricas.soma ?? -1) / 10) * 10 === v;
+    return `<td class="${classe}${temJogo ? ' marcado' : ''}${temConcurso ? ' marcado-concurso' : ''}" title="${temJogo ? 'Você tem jogo(s) nessa faixa. ' : ''}${temConcurso ? 'Faixa do concurso comparado.' : ''}">${qtd}</td>`;
   }).join('');
 
   return `
@@ -889,9 +933,10 @@ function renderGradeRepetidas(distMap, jogosMetricas) {
       const qtd = linhaMetrica[v] ?? 0;
       const classe = tierClasse(qtd, max);
       const temJogo = jogosMetricas.some((j) => j.repetidas === v);
+      const temConcurso = _concursoComparadoMetricas && _concursoComparadoMetricas.repetidas === v;
       return `<tr>
         <td class="rotulo">${String(v).padStart(2, '0')}</td>
-        <td class="${classe}${temJogo ? ' marcado' : ''}" title="${temJogo ? 'Você tem jogo(s) com esse valor' : ''}">${qtd}</td>
+        <td class="${classe}${temJogo ? ' marcado' : ''}${temConcurso ? ' marcado-concurso' : ''}" title="${temJogo ? 'Você tem jogo(s) com esse valor. ' : ''}${temConcurso ? 'Valor do concurso comparado.' : ''}">${qtd}</td>
       </tr>`;
     })
     .join('');
@@ -993,12 +1038,85 @@ async function carregarGradeHistorica(jogosMetricas) {
   renderAlertaMetricasRaras(distMap, jogosMetricas);
 }
 
+// ---------------------------------------------------------------------
+// Comparar um concurso específico com a grade histórica (Meus jogos)
+// ---------------------------------------------------------------------
+async function popularSelectConcursosComparar() {
+  const sel = document.getElementById('select-concurso-comparar');
+  const { data, error } = await supabaseClient
+    .from('concursos')
+    .select('concurso')
+    .order('concurso', { ascending: false });
+  if (error || !data) return;
+  data.forEach((c) => {
+    const opt = document.createElement('option');
+    opt.value = c.concurso;
+    opt.textContent = `Concurso ${c.concurso}`;
+    sel.appendChild(opt);
+  });
+}
+
+document.getElementById('select-concurso-comparar').addEventListener('change', async (ev) => {
+  const valor = ev.target.value;
+  const infoEl = document.getElementById('concurso-comparar-info');
+
+  if (!valor) {
+    _concursoComparadoMetricas = null;
+    infoEl.innerHTML = '';
+    await carregarGradeHistorica(_ultimosJogosCarregados);
+    return;
+  }
+
+  const concursoNum = parseInt(valor, 10);
+  infoEl.innerHTML = '<span class="carregando">Calculando…</span>';
+
+  try {
+    const { data: concursosRelevantes, error } = await supabaseClient
+      .from('concursos')
+      .select('concurso, dezenas')
+      .lte('concurso', concursoNum)
+      .order('concurso', { ascending: false })
+      .limit(2);
+    if (error) throw error;
+    if (!concursosRelevantes || concursosRelevantes.length === 0) throw new Error('Concurso não encontrado');
+
+    const atual = concursosRelevantes.find((c) => c.concurso === concursoNum);
+    const anterior = concursosRelevantes.find((c) => c.concurso !== concursoNum);
+    if (!atual) throw new Error('Concurso não encontrado');
+
+    const mapaCategorias = await buscarMapaCategorias();
+    const dezenas = atual.dezenas;
+
+    const pares = dezenas.filter((d) => d % 2 === 0).length;
+    const repetidas = anterior ? dezenas.filter((d) => anterior.dezenas.includes(d)).length : null;
+    const primos = dezenas.filter((d) => (mapaCategorias.primos ?? new Set()).has(d)).length;
+    const moldura = dezenas.filter((d) => (mapaCategorias.moldura ?? new Set()).has(d)).length;
+    const fibonacci = dezenas.filter((d) => (mapaCategorias.fibonacci ?? new Set()).has(d)).length;
+    const magicos = dezenas.filter((d) => (mapaCategorias.magicos ?? new Set()).has(d)).length;
+    const soma = dezenas.reduce((a, b) => a + b, 0);
+    const linha1 = dezenas.filter((d) => d >= 1 && d <= 5).length;
+    const linha2 = dezenas.filter((d) => d >= 6 && d <= 10).length;
+    const linha3 = dezenas.filter((d) => d >= 11 && d <= 15).length;
+    const linha4 = dezenas.filter((d) => d >= 16 && d <= 20).length;
+    const linha5 = dezenas.filter((d) => d >= 21 && d <= 25).length;
+
+    _concursoComparadoMetricas = { pares, repetidas, primos, moldura, fibonacci, magicos, soma, linha1, linha2, linha3, linha4, linha5 };
+
+    infoEl.innerHTML = `<div style="margin-top:4px; margin-bottom:8px;"><strong>Concurso ${concursoNum}:</strong> ${chipsDezenas([...dezenas].sort((a, b) => a - b))}</div>`;
+
+    await carregarGradeHistorica(_ultimosJogosCarregados);
+  } catch (e) {
+    infoEl.innerHTML = `<span class="msg-erro">Erro: ${e.message}</span>`;
+  }
+});
+
 let _ultimosJogosCarregados = [];
 let _jogosSelecionados = new Set();
+let _distMapTabelaCache = null;
+let _faixasTabelaCache = {};
 
 async function carregarMeusJogos() {
   const statusEl = document.getElementById('meus-jogos-status');
-  const tabelaEl = document.getElementById('meus-jogos-tabela');
 
   const { data, error } = await supabaseClient
     .from('meus_jogos_metricas')
@@ -1023,24 +1141,59 @@ async function carregarMeusJogos() {
 
   await carregarGradeHistorica(_ultimosJogosCarregados);
 
+  try {
+    _faixasTabelaCache = await obterFaixasAceitaveis();
+  } catch (e) {
+    _faixasTabelaCache = {};
+  }
+  try {
+    _distMapTabelaCache = await buscarDistribuicaoHistorica();
+  } catch (e) {
+    _distMapTabelaCache = null;
+  }
+
+  aplicarFiltroConcursoAlvo();
+}
+
+// Detecta automaticamente a coluna de concurso alvo (procura "concurso" no
+// nome), já que "meus_jogos_metricas" pode ou não repassar a coluna
+// "concurso_alvo" de "meus_jogos" dependendo de como a view foi criada.
+function chaveConcursoAlvo(jogos) {
+  if (!jogos || jogos.length === 0) return null;
+  return Object.keys(jogos[0]).find((k) => k.toLowerCase().includes('concurso')) ?? null;
+}
+
+function aplicarFiltroConcursoAlvo() {
+  const valorFiltro = document.getElementById('filtro-concurso-alvo').value.trim();
+  let lista = _ultimosJogosCarregados;
+
+  if (valorFiltro && lista.length > 0) {
+    const chave = chaveConcursoAlvo(lista);
+    if (chave) {
+      lista = lista.filter((j) => String(j[chave]) === valorFiltro);
+    }
+  }
+
+  renderizarTabelaMeusJogos(lista);
+}
+
+document.getElementById('filtro-concurso-alvo').addEventListener('input', aplicarFiltroConcursoAlvo);
+document.getElementById('btn-limpar-filtro-alvo').addEventListener('click', () => {
+  document.getElementById('filtro-concurso-alvo').value = '';
+  aplicarFiltroConcursoAlvo();
+});
+
+function renderizarTabelaMeusJogos(data) {
+  const tabelaEl = document.getElementById('meus-jogos-tabela');
+
   if (!data || data.length === 0) {
-    tabelaEl.innerHTML = '<p style="color:#888;">Nenhum jogo cadastrado ainda.</p>';
+    tabelaEl.innerHTML = '<p style="color:#888;">Nenhum jogo encontrado.</p>';
     return;
   }
 
-  let faixas = {};
-  try {
-    faixas = await obterFaixasAceitaveis();
-  } catch (e) {
-    // segue sem destaque de cor se der erro ao buscar as faixas
-  }
-
-  let distMapTabela = null;
-  try {
-    distMapTabela = await buscarDistribuicaoHistorica();
-  } catch (e) {
-    // se falhar, cai no fallback de faixas min/max lá embaixo
-  }
+  const chaveAlvo = chaveConcursoAlvo(_ultimosJogosCarregados);
+  const faixas = _faixasTabelaCache;
+  const distMapTabela = _distMapTabelaCache;
 
   const celulaMetrica = (valor, metrica) => {
     const faixa = faixas[metrica];
@@ -1049,7 +1202,7 @@ async function carregarMeusJogos() {
   };
 
   const celulaMetricaRara = (valor, chave) => {
-    if (!distMapTabela) return celulaMetrica(valor, chave); // fallback se a view falhar
+    if (!distMapTabela) return celulaMetrica(valor, chave);
     const classe = classeRaridade(chave, valor, distMapTabela);
     return `<td class="${classe}">${valor ?? '—'}</td>`;
   };
@@ -1057,7 +1210,7 @@ async function carregarMeusJogos() {
   let html = `<table class="tabela-metricas"><thead><tr>
     <th><input type="checkbox" id="chk-todos-jogos" /></th>
     <th>#</th>
-    <th>Nome</th><th>Status</th><th>Dezenas</th>
+    <th>Nome</th><th>Status</th><th>Alvo</th><th>Dezenas</th>
     <th>Par</th><th>Ímp</th><th>Soma</th><th>Rep</th>
     <th>Prim</th><th>Mo</th><th>Mag</th><th>Fibo</th>
     <th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>L5</th><th></th><th></th>
@@ -1067,12 +1220,14 @@ async function carregarMeusJogos() {
     const impares = jogo.impares;
     const dezenasOrdenadas = [...jogo.dezenas].sort((a, b) => a - b);
     const dezenasFormatadas = dezenasOrdenadas.map((d) => String(d).padStart(2, '0')).join(' ');
+    const valorAlvo = chaveAlvo ? jogo[chaveAlvo] : null;
 
     html += `<tr data-id="${jogo.id}">
       <td><input type="checkbox" class="chk-jogo" data-id="${jogo.id}" /></td>
       <td>${indice + 1}</td>
       <td>${jogo.nome ?? '—'}</td>
       <td>${badgeStatus(jogo.status)}</td>
+      <td>${valorAlvo ?? '—'}</td>
       <td>${chipsDezenasEmFileiras(dezenasOrdenadas)}</td>
       ${celulaMetricaRara(jogo.pares, 'pares')}
       ${celulaMetricaRara(impares, 'impares')}
@@ -1220,9 +1375,10 @@ document.getElementById('btn-copiar-todos').addEventListener('click', async (ev)
 // ---------------------------------------------------------------------
 // Aba Conferência
 // ---------------------------------------------------------------------
+let _ultimaConferenciaCarregada = [];
+
 async function carregarConferencia() {
   const statusEl = document.getElementById('conferencia-status');
-  const tabelaEl = document.getElementById('conferencia-tabela');
   const { data, error } = await supabaseClient.from('painel_conferencias').select('*');
   if (error) {
     statusEl.textContent = 'Erro ao carregar: ' + error.message;
@@ -1230,8 +1386,34 @@ async function carregarConferencia() {
     return;
   }
   statusEl.textContent = '';
-  tabelaEl.innerHTML = montarTabelaGenerica(data);
+  _ultimaConferenciaCarregada = data ?? [];
+  aplicarFiltroConferencia();
 }
+
+// Detecta automaticamente qual coluna representa o concurso (procura por
+// "concurso" no nome da coluna) e filtra por ela — assim não depende de
+// eu saber o nome exato da coluna na view "painel_conferencias".
+function aplicarFiltroConferencia() {
+  const tabelaEl = document.getElementById('conferencia-tabela');
+  const valorFiltro = document.getElementById('filtro-concurso-conferencia').value.trim();
+
+  let linhas = _ultimaConferenciaCarregada;
+
+  if (valorFiltro && linhas.length > 0) {
+    const chaveConcurso = Object.keys(linhas[0]).find((k) => k.toLowerCase().includes('concurso'));
+    if (chaveConcurso) {
+      linhas = linhas.filter((l) => String(l[chaveConcurso]) === valorFiltro);
+    }
+  }
+
+  tabelaEl.innerHTML = montarTabelaGenerica(linhas);
+}
+
+document.getElementById('filtro-concurso-conferencia').addEventListener('input', aplicarFiltroConferencia);
+document.getElementById('btn-limpar-filtro-conferencia').addEventListener('click', () => {
+  document.getElementById('filtro-concurso-conferencia').value = '';
+  aplicarFiltroConferencia();
+});
 
 // ---------------------------------------------------------------------
 // Aba Análise — últimos 20 concursos
@@ -1240,20 +1422,13 @@ async function carregarAnalise() {
   const statusEl = document.getElementById('analise-status');
   const tabelaEl = document.getElementById('analise-tabela');
 
-  const { data: categoriasRaw, error: erroCategorias } = await supabaseClient
-    .from('categorias_numeros')
-    .select('*');
-
-  if (erroCategorias) {
-    statusEl.innerHTML = `<span class="msg-erro">Erro ao carregar categorias: ${erroCategorias.message}</span>`;
+  let mapaCategorias;
+  try {
+    mapaCategorias = await buscarMapaCategorias();
+  } catch (e) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro ao carregar categorias: ${e.message}</span>`;
     return;
   }
-
-  const mapaCategorias = {};
-  (categoriasRaw ?? []).forEach((linha) => {
-    if (!mapaCategorias[linha.categoria]) mapaCategorias[linha.categoria] = new Set();
-    mapaCategorias[linha.categoria].add(linha.dezena);
-  });
 
   const CATEGORIAS_EXIBIDAS = ['primos', 'fibonacci', 'moldura', 'magicos'];
 
@@ -1312,21 +1487,46 @@ async function carregarAnalise() {
     </thead>
     <tbody>`;
 
+  const rotuloContagem = (n, singular, plural) => `<div style="font-weight:bold; margin-bottom:4px;">${n} ${n === 1 ? singular : plural}</div>`;
+
   linhas.forEach(({ atual, repetidas, porCategoria, linhasVolante }) => {
     html += `<tr>
       <td>${atual.concurso}</td>
       <td>${atual.data_sorteio ?? '—'}</td>
       <td>${chipsDezenas(atual.dezenas)}</td>
-      <td><div style="font-weight:bold; margin-bottom:4px;">${repetidas.length} repetida${repetidas.length === 1 ? '' : 's'}</div>${chipsDezenas(repetidas)}</td>
-      <td>${chipsDezenas(porCategoria.primos)}</td>
-      <td>${chipsDezenas(porCategoria.fibonacci)}</td>
-      <td>${chipsDezenas(porCategoria.moldura)}</td>
-      <td>${chipsDezenas(porCategoria.magicos)}</td>
+      <td>${rotuloContagem(repetidas.length, 'repetida', 'repetidas')}${chipsDezenas(repetidas)}</td>
+      <td>${rotuloContagem(porCategoria.primos.length, 'primo', 'primos')}${chipsDezenas(porCategoria.primos)}</td>
+      <td>${rotuloContagem(porCategoria.fibonacci.length, 'fibonacci', 'fibonacci')}${chipsDezenas(porCategoria.fibonacci)}</td>
+      <td>${rotuloContagem(porCategoria.moldura.length, 'moldura', 'moldura')}${chipsDezenas(porCategoria.moldura)}</td>
+      <td>${rotuloContagem(porCategoria.magicos.length, 'mágico', 'mágicos')}${chipsDezenas(porCategoria.magicos)}</td>
       ${linhasVolante.map((qtd) => `<td>${qtd}</td>`).join('')}
     </tr>`;
   });
 
-  html += '</tbody></table>';
+  html += '</tbody>';
+
+  // Rodapé com a média de cada coluna ao longo dos concursos mostrados —
+  // dá pra ver, por exemplo, quantos primos saem em média por concurso.
+  const total = linhas.length;
+  const media = (fn) => (linhas.reduce((acc, l) => acc + fn(l), 0) / total).toFixed(1);
+  const mediaRepetidas = media((l) => l.repetidas.length);
+  const mediaPrimos = media((l) => l.porCategoria.primos.length);
+  const mediaFibonacci = media((l) => l.porCategoria.fibonacci.length);
+  const mediaMoldura = media((l) => l.porCategoria.moldura.length);
+  const mediaMagicos = media((l) => l.porCategoria.magicos.length);
+  const mediasLinhas = [0, 1, 2, 3, 4].map((i) => media((l) => l.linhasVolante[i]));
+
+  html += `<tfoot><tr style="font-weight:bold; background:#fafafa;">
+    <td colspan="3">Média (últimos ${total} concursos)</td>
+    <td>${mediaRepetidas}</td>
+    <td>${mediaPrimos}</td>
+    <td>${mediaFibonacci}</td>
+    <td>${mediaMoldura}</td>
+    <td>${mediaMagicos}</td>
+    ${mediasLinhas.map((m) => `<td>${m}</td>`).join('')}
+  </tr></tfoot>`;
+
+  html += '</table>';
 
   statusEl.textContent = '';
   tabelaEl.innerHTML = html;
@@ -1402,6 +1602,7 @@ carregarMeusJogos();
 carregarConferencia();
 carregarAnalise();
 carregarMatrizAtraso();
+popularSelectConcursosComparar();
 </script>
 
 </body>
