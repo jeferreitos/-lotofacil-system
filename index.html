@@ -259,6 +259,10 @@
 
     <div class="cartao">
       <h2>Dezenas atrasadas por categoria</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Informação histórica sobre o estado de cada ciclo. Em testes com 3.794 concursos, o estado
+        dos ciclos não ajudou a prever o próximo sorteio.
+      </p>
       <div id="ciclos-status" class="carregando">Carregando…</div>
       <div id="ciclos-tabela"></div>
     </div>
@@ -272,12 +276,18 @@
   <!-- ===================== GERAR JOGOS ===================== -->
   <section id="aba-gerar" class="aba">
     <div class="cartao">
-      <h2>Gerar jogos — Índice de Força do Jogo (IFJ)</h2>
+      <h2>Gerar jogos — IFJ (aderência ao histórico)</h2>
       <p style="font-size:12px; color:#666; margin-top:-6px;">
-        Cada jogo é pontuado de 0 a 100 com base na frequência histórica de cada critério
-        (soma, pares/ímpares, repetidas, primos, moldura, fibonacci e mágicos), calculada pela
-        function <code>gerar_jogos</code> do banco. O primeiro jogo da lista é o Jogo Âncora
-        (maior nota).
+        Cada jogo recebe de 0 a 100 pontos conforme o quanto ele se parece com o histórico dos
+        concursos em cada critério (soma, pares/ímpares, repetidas, primos, moldura, fibonacci e
+        mágicos), calculada pela function <code>gerar_jogos</code> do banco. O primeiro jogo da
+        lista é o Jogo Âncora (maior nota).
+      </p>
+      <p style="font-size:12px; color:#7a4b00; background:#fff8e6; border-radius:6px; padding:6px 8px;">
+        <strong>Importante:</strong> a nota mede só a semelhança com o histórico. Em testes com
+        3.794 concursos, jogos com nota alta não acertaram mais do que jogos aleatórios, e cada
+        combinação tem a mesma chance de ser sorteada. Use como organização dos jogos, não como
+        previsão.
       </p>
       <div class="linha-form">
         <label for="qtd-jogos">Quantidade:</label>
@@ -649,17 +659,17 @@ async function carregarDuracaoCiclos() {
 // Aba Gerar jogos — ranking IFJ
 // ---------------------------------------------------------------------
 const CORES_CATEGORIA_IFJ = {
-  'SUPER PREMIUM': { cor: '#8a6d00', bg: '#fff3cd', emoji: '⭐' },
-  'PREMIUM':       { cor: '#1a8a3a', bg: '#eafaf0', emoji: '🟢' },
-  'MUITO BOM':     { cor: '#8a7000', bg: '#fffbe0', emoji: '🟡' },
-  'BOM':           { cor: '#b45f06', bg: '#fdf0e0', emoji: '🟠' },
-  'COBERTURA':     { cor: '#1560bd', bg: '#e3f0fb', emoji: '🔵' },
-  'DESCARTAR':     { cor: '#b91c1c', bg: '#fde2e2', emoji: '🔴' },
+  'SUPER PREMIUM': { cor: '#8a6d00', bg: '#fff3cd', emoji: '🟣', rotulo: 'ADERÊNCIA MÁXIMA' },
+  'PREMIUM':       { cor: '#1a8a3a', bg: '#eafaf0', emoji: '🟢', rotulo: 'ADERÊNCIA ALTA' },
+  'MUITO BOM':     { cor: '#8a7000', bg: '#fffbe0', emoji: '🟡', rotulo: 'ADERÊNCIA BOA' },
+  'BOM':           { cor: '#b45f06', bg: '#fdf0e0', emoji: '🟠', rotulo: 'ADERÊNCIA MÉDIA' },
+  'COBERTURA':     { cor: '#1560bd', bg: '#e3f0fb', emoji: '🔵', rotulo: 'COBERTURA' },
+  'DESCARTAR':     { cor: '#b91c1c', bg: '#fde2e2', emoji: '🔴', rotulo: 'ADERÊNCIA BAIXA' },
 };
 
 function badgeCategoriaIFJ(categoria) {
   const cfg = CORES_CATEGORIA_IFJ[categoria] ?? { cor: '#666', bg: '#eee', emoji: '⬜' };
-  return `<span class="badge-categoria" style="background:${cfg.bg}; color:${cfg.cor};">${cfg.emoji} ${categoria ?? '—'}</span>`;
+  return `<span class="badge-categoria" style="background:${cfg.bg}; color:${cfg.cor};">${cfg.emoji} ${cfg.rotulo ?? categoria ?? '—'}</span>`;
 }
 
 function renderizarRankingIFJ(jogos) {
