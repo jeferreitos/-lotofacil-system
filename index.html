@@ -580,7 +580,20 @@
         <input type="number" id="bt-ultimos" value="500" min="50" max="4000" step="50" style="width:90px" />
         <label for="bt-jogos">Jogos por concurso:</label>
         <input type="number" id="bt-jogos" value="10" min="1" max="30" style="width:70px" />
+        <label for="bt-dezenas">Dezenas por jogo:</label>
+        <select id="bt-dezenas">
+          <option value="15" selected>15</option>
+          <option value="16">16</option>
+          <option value="17">17</option>
+          <option value="18">18</option>
+          <option value="19">19</option>
+          <option value="20">20</option>
+        </select>
       </div>
+      <p style="font-size:12px; color:#888; margin-top:-4px;">
+        Com 16 a 20 dezenas, "pontos" é o melhor resultado entre os jogos de 15 contidos no jogo
+        (o que vale pra faixa de prêmio), e as preferências opcionais da Cobertura não são usadas.
+      </p>
       <div class="linha-form" id="bt-estrategias">
         <label><input type="checkbox" value="cobertura" checked /> Gerador por cobertura (com as preferências da aba Gerar jogos)</label>
         <label><input type="checkbox" value="repetidas_ciclo" checked /> 9 repetidas + ausentes do ciclo + atrasadas</label>
@@ -1278,6 +1291,9 @@ function renderAlertaMetricasRaras(distMap, jogosMetricas) {
 }
 
 async function carregarGradeHistorica(jogosMetricas) {
+  // o histórico só tem sorteios de 15 dezenas: jogos de 16 a 20 não são
+  // comparáveis (não marcam a grade nem entram nos alertas de valor raro)
+  jogosMetricas = (jogosMetricas ?? []).filter((j) => (j.dezenas?.length ?? 15) === 15);
   const statusEl = document.getElementById('grade-historico-status');
   const containerEl = document.getElementById('grade-historico');
 
@@ -1441,7 +1457,7 @@ async function carregarMeusJogos() {
   _ultimosJogosCarregados = data ?? [];
 
   _ultimosJogosCarregados.forEach((jogo) => {
-    jogo.impares = 15 - (jogo.pares ?? 0);
+    jogo.impares = (jogo.dezenas?.length ?? 15) - (jogo.pares ?? 0);
   });
 
   _jogosSelecionados.clear();
@@ -1510,7 +1526,11 @@ function renderizarTabelaMeusJogos(data) {
     return `<td class="${classe}">${valor ?? '—'}</td>`;
   };
 
+  // jogo de 16 a 20 dezenas: números sem cor (o histórico é de 15 dezenas)
+  let linhaSemCor = false;
+
   const celulaMetricaRara = (valor, chave) => {
+    if (linhaSemCor) return `<td>${valor ?? '—'}</td>`;
     if (!distMapTabela) return celulaMetrica(valor, chave);
     const classe = classeTierGrade(chave, valor, distMapTabela);
     return `<td class="${classe}">${valor ?? '—'}</td>`;
@@ -1530,11 +1550,15 @@ function renderizarTabelaMeusJogos(data) {
     const dezenasOrdenadas = [...jogo.dezenas].sort((a, b) => a - b);
     const dezenasFormatadas = dezenasOrdenadas.map((d) => String(d).padStart(2, '0')).join(' ');
     const valorAlvo = chaveAlvo ? jogo[chaveAlvo] : null;
+    linhaSemCor = dezenasOrdenadas.length > 15;
+    const avisoGrande = linhaSemCor
+      ? `<div style="font-size:11px; color:#888;">jogo de ${dezenasOrdenadas.length} dezenas (sem comparação de cores)</div>`
+      : '';
 
     html += `<tr data-id="${jogo.id}">
       <td><input type="checkbox" class="chk-jogo" data-id="${jogo.id}" /></td>
       <td>${indice + 1}</td>
-      <td>${escaparHtml(jogo.nome ?? '—')}</td>
+      <td>${escaparHtml(jogo.nome ?? '—')}${avisoGrande}</td>
       <td>${badgeStatus(jogo.status)}</td>
       <td>${valorAlvo ?? '—'}</td>
       <td>${chipsDezenasEmFileiras(dezenasOrdenadas)}</td>
@@ -2233,7 +2257,10 @@ function gerarJogoEspecial(n, metodo, estado, ctx, outros) {
       .map((d) => ({ d, falta: (estado.faltandoCiclo >> (d - 1)) & 1, atraso: estado.atraso[d - 1], sorte: Math.random() }))
       .sort((a, b) => b.falta - a.falta || b.atraso - a.atraso || b.sorte - a.sorte)
       .map((x) => x.d);
-    return mascaraDe([...sortearDe(doUltimo, 9), ...prioridade.slice(0, n - 9)]);
+    // 9 do último concurso; com 20 dezenas não há ausentes suficientes (são
+    // só 10), então usa 10 do último
+    const repetidas = Math.max(9, n - ausentes.length);
+    return mascaraDe([...sortearDe(doUltimo, repetidas), ...prioridade.slice(0, n - repetidas)]);
   }
   if (metodo === 'quentes') {
     const janela = ctx.historico.slice(Math.max(0, estado.indice - 20), estado.indice);
@@ -2478,13 +2505,24 @@ const ESTRATEGIAS_TESTE = {
   },
 };
 
-// chance teórica de k acertos pra qualquer jogo de 15 dezenas
+// chance teórica de k acertos pra qualquer jogo de "n" dezenas (15 a 20)
 function combinacoes(n, k) {
+  if (k < 0 || k > n) return 0;
   let r = 1;
   for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i;
   return r;
 }
-const CHANCE_TEORICA = Array.from({ length: 16 }, (_, k) => (combinacoes(15, k) * combinacoes(10, 15 - k)) / combinacoes(25, 15));
+function chanceTeorica(n) {
+  return Array.from({ length: 16 }, (_, k) => (combinacoes(n, k) * combinacoes(25 - n, 15 - k)) / combinacoes(25, 15));
+}
+
+// Jogos de "n" dezenas (16 a 20) por estratégia, um a um; a Cobertura usa
+// os jogos anteriores do mesmo concurso pra completar
+function gerarJogosGrandes(chave, qtd, n, estado, ctx) {
+  const jogos = [];
+  for (let j = 0; j < qtd; j++) jogos.push(gerarJogoEspecial(n, chave, estado, ctx, jogos));
+  return jogos;
+}
 
 document.getElementById('btn-rodar-teste').addEventListener('click', async () => {
   const btn = document.getElementById('btn-rodar-teste');
@@ -2492,6 +2530,8 @@ document.getElementById('btn-rodar-teste').addEventListener('click', async () =>
   const resultadoEl = document.getElementById('bt-resultado');
   const escolhidas = [...document.querySelectorAll('#bt-estrategias input:checked')].map((i) => i.value);
   const jogosPorConcurso = Math.min(30, Math.max(1, parseInt(document.getElementById('bt-jogos').value, 10) || 10));
+  const dezenasPorJogo = parseInt(document.getElementById('bt-dezenas').value, 10) || 15;
+  const CHANCE_TEORICA = chanceTeorica(dezenasPorJogo);
 
   if (escolhidas.length === 0) {
     statusEl.innerHTML = '<span class="msg-erro">Escolha pelo menos uma estratégia.</span>';
@@ -2517,7 +2557,9 @@ document.getElementById('btn-rodar-teste').addEventListener('click', async () =>
       const estado = estados[i];
       const sorteado = historico[i].mascara;
       for (const chave of escolhidas) {
-        const jogos = ESTRATEGIAS_TESTE[chave].gerar(jogosPorConcurso, estado, ctx);
+        const jogos = dezenasPorJogo === 15
+          ? ESTRATEGIAS_TESTE[chave].gerar(jogosPorConcurso, estado, ctx)
+          : gerarJogosGrandes(chave, jogosPorConcurso, dezenasPorJogo, estado, ctx);
         let premiou = false;
         for (const j of jogos) {
           const a = contarBits(j & sorteado);
@@ -2543,7 +2585,7 @@ document.getElementById('btn-rodar-teste').addEventListener('click', async () =>
     let html = `<table class="tabela-backtest">
       <thead><tr><th>Estratégia</th><th>Concursos com<br />algum jogo 11+</th><th>Média de<br />pontos</th><th>11+</th><th>12+</th><th>13+</th><th>14+</th><th>15</th></tr></thead>
       <tbody>
-        <tr class="linha-teoria"><td>Teoria (qualquer jogo)</td><td>${fmt(premiadoAcaso, 1)}*</td>
+        <tr class="linha-teoria"><td>Teoria (qualquer jogo de ${dezenasPorJogo} dezenas)</td><td>${fmt(premiadoAcaso, 1)}*</td>
           <td>${mediaTeorica.toFixed(3).replace('.', ',')}</td>
           <td>${fmt(acimaDe(CHANCE_TEORICA, 11), 2)}</td><td>${fmt(acimaDe(CHANCE_TEORICA, 12), 2)}</td>
           <td>${fmt(acimaDe(CHANCE_TEORICA, 13), 3)}</td><td>${fmt(acimaDe(CHANCE_TEORICA, 14), 4)}</td><td>—</td></tr>`;
@@ -2565,7 +2607,10 @@ document.getElementById('btn-rodar-teste').addEventListener('click', async () =>
         entre si (acertam e erram juntos) e sobe quando eles se complementam.
       </p>
       <p style="font-size:12px; color:#666;">
-        ${ultimos} concursos × ${jogosPorConcurso} jogos = ${ultimos * jogosPorConcurso} jogos por estratégia.
+        ${ultimos} concursos × ${jogosPorConcurso} jogos de ${dezenasPorJogo} dezenas = ${ultimos * jogosPorConcurso} jogos por estratégia.
+        ${dezenasPorJogo > 15
+          ? `<strong>Custo:</strong> cada jogo de ${dezenasPorJogo} dezenas vale ${combinacoes(dezenasPorJogo, 15).toLocaleString('pt-BR')} apostas simples, então ${jogosPorConcurso} jogo(s) por concurso = ${(jogosPorConcurso * combinacoes(dezenasPorJogo, 15)).toLocaleString('pt-BR')} apostas simples por concurso.`
+          : ''}
         Diferenças de poucos décimos entre as estratégias são variação normal do acaso; uma estratégia só
         estaria funcionando se ficasse claramente acima da linha "Teoria" de forma consistente, rodando o
         teste várias vezes e em períodos diferentes.
