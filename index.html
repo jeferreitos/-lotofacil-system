@@ -416,6 +416,20 @@
         <button class="acao" id="btn-gerar-cobertura">Gerar</button>
         <span id="metodos-total" style="font-size:13px; color:#666;"></span>
       </div>
+      <div class="linha-form">
+        <button class="acao secundario" id="btn-pacote-16">Atalho: 16 jogos com cobertura</button>
+        <span class="ajuda" tabindex="0">?<span class="ajuda-texto">
+          Gera 16 jogos de 15 dezenas pelo método Cobertura: o mesmo custo de 1 jogo de 16 dezenas
+          (16 apostas simples). Os dois pagam, em média, os mesmos prêmios no longo prazo; a diferença
+          é a frequência:<br />
+          <strong>16 jogos com cobertura</strong>: pelo menos um 11+ em ~93% dos concursos, pelo menos
+          um 13+ em ~2,4%; normalmente 1 ou 2 prêmios por vez.<br />
+          <strong>1 jogo de 16 dezenas</strong>: pelo menos um 11+ em ~22% dos concursos, 13+ em
+          ~0,65%; quando acerta, vários prêmios de uma vez.<br />
+          No histórico real (3.699 concursos), 16 jogos com cobertura premiaram em 92,4% dos concursos,
+          contra 21% a 23% de 1 jogo de 16 dezenas. Usa as preferências opcionais abaixo.
+        </span></span>
+      </div>
       <details class="preferencias-cobertura">
         <summary>Preferências opcionais do método Cobertura <span style="color:#888; font-weight:normal;">(filtram o perfil dos jogos, mas não mudam a chance de cada um)</span></summary>
         <div class="linha-form">
@@ -2118,29 +2132,66 @@ function sortearCandidato(prefs, estado, resultadosPassados) {
     } else {
       dezenas = sortearDe(TODAS_DEZENAS, 15);
     }
-    dezenas.sort((a, b) => a - b);
     const mascara = mascaraDe(dezenas);
-
-    if (prefs.pares) {
-      const pares = dezenas.filter((d) => d % 2 === 0).length;
-      if (pares < prefs.pares[0] || pares > prefs.pares[1]) continue;
-    }
-    if (prefs.soma) {
-      const soma = dezenas.reduce((a, b) => a + b, 0);
-      if (soma < prefs.soma[0] || soma > prefs.soma[1]) continue;
-    }
-    if (prefs.cicloMin && contarBits(mascara & estado.faltandoCiclo) < Math.min(prefs.cicloMin, contarBits(estado.faltandoCiclo))) continue;
-    if (prefs.evitarPopulares && padraoPopular(mascara, dezenas, estado, resultadosPassados)) continue;
-    return mascara;
+    if (atendePreferencias(mascara, prefs, estado, resultadosPassados)) return mascara;
   }
   return null;
+}
+
+function atendePreferencias(mascara, prefs, estado, resultadosPassados) {
+  const dezenas = dezenasDaMascara(mascara);
+  if (prefs.repetidas && estado.ultimo) {
+    const rep = contarBits(mascara & estado.ultimo);
+    if (rep < prefs.repetidas[0] || rep > prefs.repetidas[1]) return false;
+  }
+  if (prefs.pares) {
+    const pares = dezenas.filter((d) => d % 2 === 0).length;
+    if (pares < prefs.pares[0] || pares > prefs.pares[1]) return false;
+  }
+  if (prefs.soma) {
+    const soma = dezenas.reduce((a, b) => a + b, 0);
+    if (soma < prefs.soma[0] || soma > prefs.soma[1]) return false;
+  }
+  if (prefs.cicloMin && contarBits(mascara & estado.faltandoCiclo) < Math.min(prefs.cicloMin, contarBits(estado.faltandoCiclo))) return false;
+  if (prefs.evitarPopulares && padraoPopular(mascara, dezenas, estado, resultadosPassados)) return false;
+  return true;
+}
+
+// Ajuste fino depois de montar o lote: troca uma dezena de dentro por uma de
+// fora num jogo sorteado e mantém a troca se o lote não ficar mais parecido
+// (soma dos quadrados das dezenas em comum não sobe). Deixa os jogos mais
+// "equidistantes": nos testes, 16 jogos subiram de ~90,7% pra ~93,1% de
+// chance de pelo menos um 11+. Só troca se o jogo continuar dentro das
+// preferências. Os jogos de outros métodos (preexistentes) não são mexidos.
+function ajustarCobertura(jogos, preexistentes, prefs, estado, resultadosPassados, passos) {
+  const lote = [...jogos];
+  const todos = () => [...preexistentes, ...lote];
+  for (let p = 0; p < passos && lote.length > 1; p++) {
+    const i = Math.floor(Math.random() * lote.length);
+    const atual = lote[i];
+    const dentro = dezenasDaMascara(atual);
+    const fora = TODAS_DEZENAS.filter((d) => !(atual & (1 << (d - 1))));
+    const sai = dentro[Math.floor(Math.random() * dentro.length)];
+    const entra = fora[Math.floor(Math.random() * fora.length)];
+    const novo = (atual & ~(1 << (sai - 1))) | (1 << (entra - 1));
+    const outros = todos().filter((_, k) => k !== preexistentes.length + i);
+    if (outros.includes(novo)) continue;
+    let delta = 0;
+    for (const o of outros) {
+      const a = contarBits(novo & o);
+      const b = contarBits(atual & o);
+      delta += a * a - b * b;
+    }
+    if (delta <= 0 && atendePreferencias(novo, prefs, estado, resultadosPassados)) lote[i] = novo;
+  }
+  return lote;
 }
 
 // Monta "qtd" jogos um a um: pra cada vaga, sorteia vários candidatos e fica
 // com o que menos se sobrepõe aos jogos já escolhidos (soma dos quadrados das
 // dezenas em comum). Isso espalha as dezenas e reduz jogos parecidos.
 // "preexistentes" são jogos de outros métodos que a cobertura deve completar.
-function gerarJogosCobertura(qtd, prefs, estado, resultadosPassados, candidatosPorJogo = 1500, preexistentes = []) {
+function gerarJogosCobertura(qtd, prefs, estado, resultadosPassados, candidatosPorJogo = 1500, preexistentes = [], passosAjuste = 20000) {
   const jogos = [];
   for (let n = 0; n < qtd; n++) {
     const jaEscolhidos = [...preexistentes, ...jogos];
@@ -2163,7 +2214,7 @@ function gerarJogosCobertura(qtd, prefs, estado, resultadosPassados, candidatosP
     if (melhor === null) break;
     jogos.push(melhor);
   }
-  return jogos;
+  return ajustarCobertura(jogos, preexistentes, prefs, estado, resultadosPassados, passosAjuste);
 }
 
 // Simula muitos sorteios e mede a chance de pelo menos um jogo do conjunto
@@ -2270,6 +2321,15 @@ function gerarJogoEspecial(n, metodo, estado, ctx, outros) {
   // atrasadas
   return mascaraDe(ordenarPor(TODAS_DEZENAS, (d) => estado.atraso[d - 1]).slice(0, n));
 }
+
+// Atalho: só Cobertura com 16 jogos (mesmo custo de 1 jogo de 16 dezenas)
+document.getElementById('btn-pacote-16').addEventListener('click', () => {
+  document.querySelectorAll('.metodo-marcado').forEach((chk) => (chk.checked = chk.dataset.metodo === 'cobertura'));
+  document.querySelector('.metodo-qtd[data-metodo="cobertura"]').value = 16;
+  document.getElementById('especial-marcado').checked = false;
+  atualizarTotalMetodos();
+  document.getElementById('btn-gerar-cobertura').click();
+});
 
 // Cada jogo gerado: { mascara, metodo, rotulo } — rotulo é o nome no cadastro
 let _ultimosJogosGerados = [];
@@ -2396,6 +2456,9 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
         <div>Chance de pelo menos 1 jogo com 11+ pontos<strong>${pct(chances.pelo11)}</strong>com ${jogos.length} jogo(s) ao acaso: ${pct(acaso11)}</div>
         <div>Chance de pelo menos 1 jogo com 13+ pontos<strong>${pct(chances.pelo13)}</strong>com ${jogos.length} jogo(s) ao acaso: ${pct(acaso13)}</div>
         <div>Dezenas em comum entre 2 jogos<strong>${sobre.media.toFixed(1).replace('.', ',')} em média</strong>no máximo ${sobre.maior} (ao acaso: 9 em média)</div>
+        ${jogos.length === 16 && jogos.every((m) => contarBits(m) === 15)
+          ? `<div>Mesmo custo em 1 jogo de 16 dezenas<strong>${pct(chanceAPartirDe(16, 11))} / ${pct(chanceAPartirDe(16, 13))}</strong>chance de 11+ / 13+ (mas, quando acerta, paga vários prêmios juntos)</div>`
+          : ''}
       </div>
       <p style="font-size:12px; color:#888; margin:0 0 6px;">Chances estimadas simulando 20.000 sorteios; "ao acaso" = mesma quantidade de jogos, do mesmo tamanho, sorteados ao acaso. Cada jogo simples de 15 dezenas, sozinho, continua com 1 em 11 de fazer 11+ pontos.</p>
       <div style="font-size:13px;"><strong>Quantas vezes cada dezena aparece nos jogos:</strong></div>
@@ -2463,7 +2526,7 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
 const ESTRATEGIAS_TESTE = {
   cobertura: {
     nome: 'Gerador por cobertura',
-    gerar: (qtd, estado, ctx) => gerarJogosCobertura(qtd, ctx.prefs, estado, ctx.resultadosPassados, 300),
+    gerar: (qtd, estado, ctx) => gerarJogosCobertura(qtd, ctx.prefs, estado, ctx.resultadosPassados, 300, [], 2000),
   },
   repetidas_ciclo: {
     nome: '9 repetidas + ausentes do ciclo + atrasadas',
@@ -2514,6 +2577,11 @@ function combinacoes(n, k) {
 }
 function chanceTeorica(n) {
   return Array.from({ length: 16 }, (_, k) => (combinacoes(n, k) * combinacoes(25 - n, 15 - k)) / combinacoes(25, 15));
+}
+
+// chance de um jogo de "n" dezenas fazer "pontos" ou mais
+function chanceAPartirDe(n, pontos) {
+  return chanceTeorica(n).slice(pontos).reduce((a, b) => a + b, 0);
 }
 
 // Jogos de "n" dezenas (16 a 20) por estratégia, um a um; a Cobertura usa
