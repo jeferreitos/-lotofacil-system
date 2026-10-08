@@ -504,7 +504,6 @@
         <label><input type="checkbox" value="repetidas_ciclo" checked /> 9 repetidas + ausentes do ciclo + atrasadas</label>
         <label><input type="checkbox" value="quentes" checked /> Mais quentes (últimos 20)</label>
         <label><input type="checkbox" value="atrasadas" checked /> 15 mais atrasadas</label>
-        <label><input type="checkbox" value="aleatorio" checked /> Totalmente aleatório</label>
       </div>
       <div class="linha-form">
         <button class="acao" id="btn-rodar-teste">Rodar teste</button>
@@ -2249,10 +2248,6 @@ const ESTRATEGIAS_TESTE = {
             .map((x) => x.d)
         )
       ),
-  },
-  aleatorio: {
-    nome: 'Totalmente aleatório',
-    gerar: (qtd) => Array.from({ length: qtd }, () => mascaraDe(sortearDe(TODAS_DEZENAS, 15))),
   },
 };
 
