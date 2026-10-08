@@ -167,10 +167,10 @@
   .tabela-grade { border-collapse: collapse; font-size: 12px; text-align: center; }
   .tabela-grade th, .tabela-grade td { border: 2px solid #fff; padding: 5px 8px; min-width: 28px; }
   .tabela-grade th.titulo-categoria { font-weight: bold; color: #fff; font-size: 12px; letter-spacing: 0.3px; }
-  .tabela-grade td.tier-alto  { background: #a9d18e; }
-  .tabela-grade td.tier-medio { background: #ffe699; }
-  .tabela-grade td.tier-baixo { background: #f4a7a7; color: #7a1414; font-weight: bold; }
-  .tabela-grade td.tier-zero  { background: #cfd8dc; color: #555; }
+  .tabela-grade td.tier-alto,  .tabela-metricas td.tier-alto  { background: #a9d18e; }
+  .tabela-grade td.tier-medio, .tabela-metricas td.tier-medio { background: #ffe699; }
+  .tabela-grade td.tier-baixo, .tabela-metricas td.tier-baixo { background: #f4a7a7; color: #7a1414; font-weight: bold; }
+  .tabela-grade td.tier-zero,  .tabela-metricas td.tier-zero  { background: #cfd8dc; color: #555; }
   .tabela-grade td.marcado    { outline: 3px solid #222; outline-offset: -2px; position: relative; }
   .tabela-grade td.marcado-concurso { box-shadow: inset 0 0 0 3px #1560bd; position: relative; }
   .tabela-grade-vertical td.rotulo { background: #f0f0f0; font-weight: bold; }
@@ -951,15 +951,19 @@ function tierClasse(qtd, maxDaLinha) {
   return 'tier-alto';
 }
 
-function classeRaridade(chave, valor, distMap) {
-  const cfg = CATEGORIAS_RARIDADE.find((c) => c.chave === chave);
-  if (!cfg || valor === null || valor === undefined) return 'dentro';
+// Mesma cor que o valor tem na grade do "Resumo — comparação com o
+// histórico" (tier-alto/medio/baixo/zero). A soma usa as faixas de 10 em 10.
+function classeTierGrade(chave, valor, distMap) {
+  if (valor === null || valor === undefined) return '';
   const linhaMetrica = distMap[chave] ?? {};
+  if (chave === 'soma') {
+    const max = Math.max(0, ...BUCKETS_SOMA.map((v) => linhaMetrica[v] ?? 0));
+    return tierClasse(linhaMetrica[Math.floor(valor / 10) * 10] ?? 0, max);
+  }
+  const cfg = CATEGORIAS_RARIDADE.find((c) => c.chave === chave);
+  if (!cfg) return '';
   const max = Math.max(0, ...cfg.valores.map((v) => linhaMetrica[v] ?? 0));
-  const classe = tierClasse(linhaMetrica[valor] ?? 0, max);
-  if (classe === 'tier-alto') return 'dentro';
-  if (classe === 'tier-medio') return 'media';
-  return 'fora';
+  return tierClasse(linhaMetrica[valor] ?? 0, max);
 }
 
 async function buscarDistribuicaoHistorica() {
@@ -1325,7 +1329,7 @@ function renderizarTabelaMeusJogos(data) {
 
   const celulaMetricaRara = (valor, chave) => {
     if (!distMapTabela) return celulaMetrica(valor, chave);
-    const classe = classeRaridade(chave, valor, distMapTabela);
+    const classe = classeTierGrade(chave, valor, distMapTabela);
     return `<td class="${classe}">${valor ?? '—'}</td>`;
   };
 
@@ -1353,7 +1357,7 @@ function renderizarTabelaMeusJogos(data) {
       <td>${chipsDezenasEmFileiras(dezenasOrdenadas)}</td>
       ${celulaMetricaRara(jogo.pares, 'pares')}
       ${celulaMetricaRara(impares, 'impares')}
-      ${celulaMetrica(jogo.soma, 'soma')}
+      ${celulaMetricaRara(jogo.soma, 'soma')}
       ${celulaMetricaRara(jogo.repetidas, 'repetidas')}
       ${celulaMetricaRara(jogo.primos, 'primos')}
       ${celulaMetricaRara(jogo.moldura, 'moldura')}
