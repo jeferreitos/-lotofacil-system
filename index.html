@@ -545,10 +545,12 @@
     <div class="cartao">
       <h2>Painel de conferência</h2>
       <div class="linha-form">
-        <label for="filtro-concurso-conferencia">Filtrar por concurso:</label>
-        <input type="number" id="filtro-concurso-conferencia" placeholder="Nº do concurso" style="width:140px" min="1" />
-        <button class="acao secundario" id="btn-limpar-filtro-conferencia">Limpar filtro</button>
+        <label for="filtro-concurso-conferencia">Concurso:</label>
+        <select id="filtro-concurso-conferencia" style="min-width:260px;">
+          <option value="">Carregando…</option>
+        </select>
       </div>
+      <div id="conferencia-sorteio"></div>
       <div id="conferencia-status" class="carregando">Carregando…</div>
       <div id="conferencia-tabela"></div>
     </div>
@@ -632,7 +634,23 @@
 const SUPABASE_URL = 'https://sywtrfytakrxzcjifftb.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zQ5MyCi6tXghZqkjB8kuFg_CneufJG3';
 
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Logo depois do login ou da renovação do token, o banco às vezes recusa a
+// consulta com "JWT issued at future": o relógio do servidor que confere o
+// token está alguns segundos atrás do que emitiu. Nesse caso espera um pouco
+// e tenta de novo (até 3 vezes), em vez de mostrar erro na tela.
+async function fetchComNovaTentativa(url, opcoes) {
+  for (let tentativa = 0; ; tentativa++) {
+    const resposta = await fetch(url, opcoes);
+    if (resposta.ok || tentativa >= 3) return resposta;
+    const texto = await resposta.clone().text();
+    if (!texto.includes('issued at future')) return resposta;
+    await new Promise((r) => setTimeout(r, 1000 * (tentativa + 1)));
+  }
+}
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { fetch: fetchComNovaTentativa },
+});
 
 // ---------------------------------------------------------------------
 // Navegação entre abas
@@ -1747,9 +1765,25 @@ async function carregarConferencia() {
   }
   _ultimaConferenciaCarregada = data ?? [];
 
+  // os últimos 20 concursos pro menu (do mais recente pro mais antigo)
+  const { data: recentes, error: erroRecentes } = await supabaseClient
+    .from('concursos')
+    .select('concurso, data_sorteio, dezenas')
+    .order('concurso', { ascending: false })
+    .limit(20);
+  if (erroRecentes) {
+    statusEl.textContent = 'Erro ao carregar os concursos: ' + erroRecentes.message;
+    statusEl.className = 'msg-erro';
+    return;
+  }
+  _concursosRecentesConferencia = recentes ?? [];
+  popularMenuConferencia();
+
   // dezenas sorteadas de cada concurso conferido, pra destacar os acertos
   _dezenasSorteadasPorConcurso = {};
-  const concursos = [...new Set(_ultimaConferenciaCarregada.map((l) => l.concurso))];
+  _concursosRecentesConferencia.forEach((c) => (_dezenasSorteadasPorConcurso[c.concurso] = new Set(c.dezenas)));
+  const concursos = [...new Set(_ultimaConferenciaCarregada.map((l) => l.concurso))]
+    .filter((c) => !_dezenasSorteadasPorConcurso[c]);
   try {
     for (let i = 0; i < concursos.length; i += 200) {
       const { data: sorteados, error: erroSorteados } = await supabaseClient
@@ -1768,18 +1802,51 @@ async function carregarConferencia() {
 }
 
 let _dezenasSorteadasPorConcurso = {};
+let _concursosRecentesConferencia = [];
+
+const dataBrasil = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
+
+// Menu com os últimos 20 concursos; mantém o que estava escolhido e, na
+// primeira vez, já abre no mais recente
+function popularMenuConferencia() {
+  const sel = document.getElementById('filtro-concurso-conferencia');
+  const escolhido = sel.value;
+  const qtdPorConcurso = {};
+  _ultimaConferenciaCarregada.forEach((l) => (qtdPorConcurso[l.concurso] = (qtdPorConcurso[l.concurso] || 0) + 1));
+
+  sel.innerHTML =
+    _concursosRecentesConferencia
+      .map((c) => {
+        const qtd = qtdPorConcurso[c.concurso] || 0;
+        return `<option value="${c.concurso}">${c.concurso} · ${dataBrasil(c.data_sorteio)} · ${qtd ? `${qtd} jogo(s)` : 'sem jogos'}</option>`;
+      })
+      .join('') + '<option value="todos">Todos os concursos</option>';
+
+  const existe = [...sel.options].some((o) => o.value === escolhido);
+  sel.value = existe && escolhido ? escolhido : String(_concursosRecentesConferencia[0]?.concurso ?? 'todos');
+}
 
 function aplicarFiltroConferencia() {
   const tabelaEl = document.getElementById('conferencia-tabela');
-  const valorFiltro = document.getElementById('filtro-concurso-conferencia').value.trim();
+  const sorteioEl = document.getElementById('conferencia-sorteio');
+  const valorFiltro = document.getElementById('filtro-concurso-conferencia').value;
 
   let linhas = _ultimaConferenciaCarregada;
-  if (valorFiltro) {
+  sorteioEl.innerHTML = '';
+  if (valorFiltro && valorFiltro !== 'todos') {
     linhas = linhas.filter((l) => String(l.concurso) === valorFiltro);
+    // dezenas sorteadas no concurso escolhido
+    const concurso = _concursosRecentesConferencia.find((c) => String(c.concurso) === valorFiltro);
+    if (concurso) {
+      sorteioEl.innerHTML = `<div style="margin:4px 0 10px; font-size:13px;">
+        <strong>Sorteadas no concurso ${concurso.concurso} (${dataBrasil(concurso.data_sorteio)}):</strong>
+        <div style="margin-top:4px;">${chipsDezenas([...concurso.dezenas].sort((a, b) => a - b))}</div>
+      </div>`;
+    }
   }
 
   if (linhas.length === 0) {
-    tabelaEl.innerHTML = '<p style="color:#888;">Nenhuma conferência encontrada.</p>';
+    tabelaEl.innerHTML = '<p style="color:#888;">Nenhum jogo salvo para este concurso.</p>';
     return;
   }
 
@@ -1826,11 +1893,7 @@ function aplicarFiltroConferencia() {
   tabelaEl.innerHTML = html;
 }
 
-document.getElementById('filtro-concurso-conferencia').addEventListener('input', aplicarFiltroConferencia);
-document.getElementById('btn-limpar-filtro-conferencia').addEventListener('click', () => {
-  document.getElementById('filtro-concurso-conferencia').value = '';
-  aplicarFiltroConferencia();
-});
+document.getElementById('filtro-concurso-conferencia').addEventListener('change', aplicarFiltroConferencia);
 
 // ---------------------------------------------------------------------
 // Aba Análise — últimos 20 concursos
