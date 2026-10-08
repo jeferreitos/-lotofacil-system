@@ -222,6 +222,7 @@
   .tabela-metodos { width: auto; margin-bottom: 10px; }
   .tabela-metodos td { vertical-align: middle; font-size: 14px; }
   .tabela-metodos input[type="number"] { width: 70px; }
+  .tabela-metodos tr.linha-especial td { background: #f3e5f5; border-top: 2px solid #e1bee7; line-height: 2.2; }
   .ajuda {
     position: relative; display: inline-flex; align-items: center; justify-content: center;
     width: 18px; height: 18px; margin-left: 6px; border-radius: 50%;
@@ -374,6 +375,40 @@
             <td><label><input type="checkbox" class="metodo-marcado" data-metodo="ifj" /> IFJ (aderência ao histórico)</label>
               <span class="ajuda" tabindex="0">?<span class="ajuda-texto">O gerador antigo: sorteia milhares de jogos e fica com os de nota alta de semelhança com o histórico (soma, pares, repetidas, primos, moldura, Fibonacci e mágicos), separados em categorias de nota (Aderência máxima, alta, média e Cobertura). A nota mede semelhança com o histórico, não chance de ganhar. Pode devolver menos jogos que o pedido.</span></span></td>
             <td><input type="number" class="metodo-qtd" data-metodo="ifj" value="2" min="1" max="50" /></td>
+          </tr>
+          <tr class="linha-especial">
+            <td colspan="2">
+              <label><input type="checkbox" id="especial-marcado" /> Jogo especial com</label>
+              <select id="especial-dezenas">
+                <option value="16" selected>16</option>
+                <option value="17">17</option>
+                <option value="18">18</option>
+                <option value="19">19</option>
+                <option value="20">20</option>
+              </select>
+              dezenas, método
+              <select id="especial-metodo">
+                <option value="cobertura" selected>Cobertura</option>
+                <option value="repetidas_ciclo">9 repetidas + ciclo + atrasadas</option>
+                <option value="quentes">Mais quentes</option>
+                <option value="atrasadas">Mais atrasadas</option>
+              </select>
+              <span class="ajuda" tabindex="0">?<span class="ajuda-texto">
+                Um jogo com mais de 15 dezenas vale por todos os jogos de 15 que dá pra formar com elas,
+                e custa isso tudo. A chance sobe na mesma proporção do preço:<br />
+                <strong>16 dezenas</strong>: custa 16 apostas simples · 11+: 22,2% · 15 pontos: 1 em 204.298<br />
+                <strong>17</strong>: 136 apostas · 11+: 39,3% · 15: 1 em 24.035<br />
+                <strong>18</strong>: 816 apostas · 11+: 60,1% · 15: 1 em 4.006<br />
+                <strong>19</strong>: 3.876 apostas · 11+: 80,2% · 15: 1 em 843<br />
+                <strong>20</strong>: 15.504 apostas · 11+: 94,3% · 15: 1 em 211<br />
+                (jogo simples de 15: 11+: 10,6% · 15: 1 em 3.268.760)<br /><br />
+                Métodos: <em>Cobertura</em> escolhe as dezenas menos usadas nos outros jogos do lote
+                (completa o lote); <em>Repetidas + ciclo</em> usa 9 dezenas do último concurso e completa
+                com as que faltam no ciclo e as mais atrasadas; <em>Mais quentes</em> sorteia entre as que
+                mais saíram nos últimos 20 concursos; <em>Mais atrasadas</em> pega as que estão há mais
+                tempo sem sair. O IFJ não tem essa opção porque a nota dele só existe pra 15 dezenas.
+              </span></span>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -2158,12 +2193,56 @@ function lerMetodosEscolhidos() {
   return escolhidos;
 }
 
+function lerJogoEspecial() {
+  if (!document.getElementById('especial-marcado').checked) return null;
+  return {
+    dezenas: parseInt(document.getElementById('especial-dezenas').value, 10),
+    metodo: document.getElementById('especial-metodo').value,
+  };
+}
+
 function atualizarTotalMetodos() {
   const total = Object.values(lerMetodosEscolhidos()).reduce((a, b) => a + b, 0);
-  document.getElementById('metodos-total').textContent = total ? `Total: ${total} jogo(s)` : 'Marque pelo menos um método.';
+  const especial = lerJogoEspecial();
+  const partes = [];
+  if (total) partes.push(`${total} jogo(s)`);
+  if (especial) partes.push(`1 jogo especial de ${especial.dezenas} dezenas`);
+  document.getElementById('metodos-total').textContent = partes.length ? `Total: ${partes.join(' + ')}` : 'Marque pelo menos um método.';
 }
-document.querySelectorAll('.metodo-marcado, .metodo-qtd').forEach((el) => el.addEventListener('input', atualizarTotalMetodos));
+document.querySelectorAll('.metodo-marcado, .metodo-qtd, #especial-marcado, #especial-dezenas, #especial-metodo')
+  .forEach((el) => el.addEventListener('input', atualizarTotalMetodos));
 atualizarTotalMetodos();
+
+// Jogo com "n" dezenas (16 a 20) montado pelo método escolhido.
+// "outros" = jogos já gerados no lote (a Cobertura usa pra completar).
+function gerarJogoEspecial(n, metodo, estado, ctx, outros) {
+  const ordenarPor = (lista, chave) =>
+    lista.map((d) => ({ d, v: chave(d), sorte: Math.random() }))
+      .sort((a, b) => b.v - a.v || b.sorte - a.sorte)
+      .map((x) => x.d);
+
+  if (metodo === 'cobertura') {
+    // as dezenas menos usadas nos outros jogos do lote
+    const uso = (d) => outros.filter((m) => m & (1 << (d - 1))).length;
+    return mascaraDe(ordenarPor(TODAS_DEZENAS, (d) => -uso(d)).slice(0, n));
+  }
+  if (metodo === 'repetidas_ciclo') {
+    const doUltimo = dezenasDaMascara(estado.ultimo);
+    const ausentes = TODAS_DEZENAS.filter((d) => !(estado.ultimo & (1 << (d - 1))));
+    const prioridade = ausentes
+      .map((d) => ({ d, falta: (estado.faltandoCiclo >> (d - 1)) & 1, atraso: estado.atraso[d - 1], sorte: Math.random() }))
+      .sort((a, b) => b.falta - a.falta || b.atraso - a.atraso || b.sorte - a.sorte)
+      .map((x) => x.d);
+    return mascaraDe([...sortearDe(doUltimo, 9), ...prioridade.slice(0, n - 9)]);
+  }
+  if (metodo === 'quentes') {
+    const janela = ctx.historico.slice(Math.max(0, estado.indice - 20), estado.indice);
+    const freq = (d) => janela.filter((h) => h.mascara & (1 << (d - 1))).length;
+    return mascaraDe(sortearDe(ordenarPor(TODAS_DEZENAS, freq).slice(0, Math.min(25, n + 3)), n));
+  }
+  // atrasadas
+  return mascaraDe(ordenarPor(TODAS_DEZENAS, (d) => estado.atraso[d - 1]).slice(0, n));
+}
 
 // Cada jogo gerado: { mascara, metodo, rotulo } — rotulo é o nome no cadastro
 let _ultimosJogosGerados = [];
@@ -2173,9 +2252,10 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
   const statusEl = document.getElementById('cob-status');
   const resultadoEl = document.getElementById('cob-resultado');
   const escolhidos = lerMetodosEscolhidos();
+  const especial = lerJogoEspecial();
   const prefs = lerPreferenciasCobertura();
 
-  if (Object.keys(escolhidos).length === 0) {
+  if (Object.keys(escolhidos).length === 0 && !especial) {
     statusEl.innerHTML = '<span class="msg-erro">Marque pelo menos um método.</span>';
     return;
   }
@@ -2239,6 +2319,19 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
       }
     }
 
+    // 4) jogo especial (16 a 20 dezenas), por último pra Cobertura poder completar o lote
+    if (especial) {
+      const mascara = gerarJogoEspecial(especial.dezenas, especial.metodo, estadoHoje, ctx, gerados.map((g) => g.mascara));
+      const nomeMetodo = METODOS_GERADOR[especial.metodo];
+      gerados.push({
+        mascara,
+        metodo: especial.metodo,
+        especial: especial.dezenas,
+        detalhe: `Especial · ${especial.dezenas} dezenas`,
+        rotulo: `Especial ${especial.dezenas} dezenas · ${nomeMetodo} · ${hoje}`,
+      });
+    }
+
     const jogos = gerados.map((g) => g.mascara);
     if (jogos.length === 0) {
       statusEl.innerHTML = '<span class="msg-erro">Nenhum jogo gerado. Se usou as preferências da Cobertura, afrouxe alguma faixa e tente de novo.</span>';
@@ -2253,7 +2346,9 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
     let acaso13 = 0;
     const RODADAS_ACASO = 5;
     for (let r = 0; r < RODADAS_ACASO; r++) {
-      const aleatorios = Array.from({ length: jogos.length }, () => mascaraDe(sortearDe(TODAS_DEZENAS, 15)));
+      // mesmo número de jogos e mesmo tamanho (o especial vira um jogo
+      // aleatório com a mesma quantidade de dezenas)
+      const aleatorios = jogos.map((m) => mascaraDe(sortearDe(TODAS_DEZENAS, contarBits(m))));
       const c = simularChances(aleatorios, sorteiosSimulados);
       acaso11 += c.pelo11 / RODADAS_ACASO;
       acaso13 += c.pelo13 / RODADAS_ACASO;
@@ -2275,7 +2370,7 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
         <div>Chance de pelo menos 1 jogo com 13+ pontos<strong>${pct(chances.pelo13)}</strong>com ${jogos.length} jogo(s) ao acaso: ${pct(acaso13)}</div>
         <div>Dezenas em comum entre 2 jogos<strong>${sobre.media.toFixed(1).replace('.', ',')} em média</strong>no máximo ${sobre.maior} (ao acaso: 9 em média)</div>
       </div>
-      <p style="font-size:12px; color:#888; margin:0 0 6px;">Chances estimadas simulando 20.000 sorteios. Cada jogo, sozinho, continua com 1 em 11 de fazer 11+ pontos.</p>
+      <p style="font-size:12px; color:#888; margin:0 0 6px;">Chances estimadas simulando 20.000 sorteios; "ao acaso" = mesma quantidade de jogos, do mesmo tamanho, sorteados ao acaso. Cada jogo simples de 15 dezenas, sozinho, continua com 1 em 11 de fazer 11+ pontos.</p>
       <div style="font-size:13px;"><strong>Quantas vezes cada dezena aparece nos jogos:</strong></div>
       <div class="uso-dezenas">${TODAS_DEZENAS.map((d, i) => `<span>${String(d).padStart(2, '0')}: ${uso[i]}x</span>`).join('')}</div>
       <div style="overflow-x:auto;"><table class="tabela-metricas" style="width:auto;">
