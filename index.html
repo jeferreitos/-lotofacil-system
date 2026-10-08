@@ -218,6 +218,20 @@
   .dezena-acerto { background: var(--verde); color: #fff; border-color: var(--verde); }
   .badge-premio { background: var(--verde); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
   .resumo-conferencia { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; margin: 6px 0 10px; }
+
+  .preferencias-cobertura { margin: 4px 0 12px; font-size: 13px; }
+  .preferencias-cobertura summary { cursor: pointer; font-weight: bold; margin-bottom: 8px; }
+  .preferencias-cobertura .linha-form { margin-bottom: 6px; }
+  #bt-estrategias { flex-direction: column; align-items: flex-start; font-size: 13px; }
+  .painel-chances { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 10px 0; }
+  .painel-chances div { background: var(--cinza-claro); border-radius: 6px; padding: 8px 10px; font-size: 12px; }
+  .painel-chances strong { display: block; font-size: 18px; color: var(--roxo); }
+  .uso-dezenas { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 12px; }
+  .uso-dezenas span { font-family: monospace; font-size: 12px; background: var(--cinza-claro); border: 1px solid var(--cinza-borda); border-radius: 4px; padding: 2px 5px; }
+  .tabela-backtest td, .tabela-backtest th { text-align: right; white-space: nowrap; }
+  .tabela-backtest th { white-space: normal; vertical-align: bottom; }
+  .tabela-backtest td:first-child, .tabela-backtest th:first-child { text-align: left; }
+  .tabela-backtest tr.linha-teoria td { background: #f3e5f5; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -250,6 +264,7 @@
   <button data-aba="meus-jogos">Meus jogos</button>
   <button data-aba="conferencia">Conferência</button>
   <button data-aba="analise">Análise</button>
+  <button data-aba="testar">Testar estratégia</button>
 </nav>
 
 <main id="painel" class="oculto">
@@ -305,6 +320,51 @@
 
   <!-- ===================== GERAR JOGOS ===================== -->
   <section id="aba-gerar" class="aba">
+    <div class="cartao">
+      <h2>Gerar jogos — cobertura</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Todo jogo de 15 dezenas tem a mesma chance de premiar (11 pontos: 1 em 11; 15 pontos:
+        1 em 3.268.760), não importa como foi montado. O que este gerador faz é montar o
+        <strong>conjunto</strong> de jogos com as dezenas bem distribuídas e pouca repetição entre
+        eles, o que aumenta a chance de <strong>pelo menos um</strong> jogo premiar, e evitar
+        padrões que muita gente joga (prêmios de 14 e 15 pontos são divididos entre os ganhadores).
+      </p>
+      <div class="linha-form">
+        <label for="cob-qtd">Quantidade de jogos:</label>
+        <input type="number" id="cob-qtd" value="10" min="1" max="50" style="width:70px" />
+        <button class="acao" id="btn-gerar-cobertura">Gerar</button>
+      </div>
+      <details class="preferencias-cobertura">
+        <summary>Preferências opcionais <span style="color:#888; font-weight:normal;">(filtram o perfil dos jogos, mas não mudam a chance de cada um)</span></summary>
+        <div class="linha-form">
+          <label><input type="checkbox" id="cob-usar-repetidas" checked /> Repetidas do último concurso entre</label>
+          <input type="number" id="cob-rep-min" value="8" min="5" max="15" style="width:60px" /> e
+          <input type="number" id="cob-rep-max" value="10" min="5" max="15" style="width:60px" />
+        </div>
+        <div class="linha-form">
+          <label><input type="checkbox" id="cob-usar-pares" /> Pares entre</label>
+          <input type="number" id="cob-pares-min" value="6" min="2" max="12" style="width:60px" /> e
+          <input type="number" id="cob-pares-max" value="9" min="2" max="12" style="width:60px" />
+        </div>
+        <div class="linha-form">
+          <label><input type="checkbox" id="cob-usar-soma" /> Soma entre</label>
+          <input type="number" id="cob-soma-min" value="170" min="120" max="270" style="width:70px" /> e
+          <input type="number" id="cob-soma-max" value="220" min="120" max="270" style="width:70px" />
+        </div>
+        <div class="linha-form">
+          <label><input type="checkbox" id="cob-usar-ciclo" /> Pelo menos</label>
+          <input type="number" id="cob-ciclo-min" value="2" min="1" max="15" style="width:60px" />
+          <span>dezena(s) que ainda faltam no ciclo das 25</span>
+        </div>
+        <div class="linha-form">
+          <label><input type="checkbox" id="cob-evitar-populares" checked /> Evitar padrões populares</label>
+          <span style="font-size:12px; color:#888;">(resultado anterior repetido, sequências longas, linhas ou colunas inteiras do volante, resultado que já saiu)</span>
+        </div>
+      </details>
+      <div id="cob-status"></div>
+      <div id="cob-resultado"></div>
+    </div>
+
     <div class="cartao">
       <h2>Gerar jogos — IFJ (aderência ao histórico)</h2>
       <p style="font-size:12px; color:#666; margin-top:-6px;">
@@ -420,6 +480,37 @@
       </p>
       <div id="analise-status" class="carregando">Carregando…</div>
       <div id="analise-tabela" style="overflow-x:auto;"></div>
+    </div>
+  </section>
+
+  <!-- ===================== TESTAR ESTRATÉGIA ===================== -->
+  <section id="aba-testar" class="aba">
+    <div class="cartao">
+      <h2>Testar estratégia no histórico</h2>
+      <p style="font-size:12px; color:#666; margin-top:-6px;">
+        Para cada concurso do período, o teste monta jogos usando só o que se sabia até a véspera e
+        confere quantos pontos eles teriam feito no resultado real. Assim dá pra ver se uma ideia
+        funciona antes de apostar dinheiro nela. A linha "Teoria" mostra o que qualquer jogo faz,
+        em média, por puro acaso.
+      </p>
+      <div class="linha-form">
+        <label for="bt-ultimos">Concursos testados (os mais recentes):</label>
+        <input type="number" id="bt-ultimos" value="500" min="50" max="4000" step="50" style="width:90px" />
+        <label for="bt-jogos">Jogos por concurso:</label>
+        <input type="number" id="bt-jogos" value="10" min="1" max="30" style="width:70px" />
+      </div>
+      <div class="linha-form" id="bt-estrategias">
+        <label><input type="checkbox" value="cobertura" checked /> Gerador por cobertura (com as preferências da aba Gerar jogos)</label>
+        <label><input type="checkbox" value="repetidas_ciclo" checked /> 9 repetidas + ausentes do ciclo + atrasadas</label>
+        <label><input type="checkbox" value="quentes" checked /> Mais quentes (últimos 20)</label>
+        <label><input type="checkbox" value="atrasadas" checked /> 15 mais atrasadas</label>
+        <label><input type="checkbox" value="aleatorio" checked /> Totalmente aleatório</label>
+      </div>
+      <div class="linha-form">
+        <button class="acao" id="btn-rodar-teste">Rodar teste</button>
+      </div>
+      <div id="bt-status"></div>
+      <div id="bt-resultado" style="overflow-x:auto;"></div>
     </div>
   </section>
 
@@ -575,6 +666,7 @@ async function obterProximoConcurso() {
 function recarregarDependentesDeConcursos() {
   // entrou concurso novo: o "próximo concurso" muda, então descarta o cache
   _proximoConcursoCache = null;
+  _historicoCache = null;
   atualizarSugestaoConcursoAlvo();
   popularSelectConcursosComparar();
   carregarCiclos();
@@ -1794,6 +1886,472 @@ async function carregarMatrizAtraso() {
   statusEl.textContent = '';
   containerEl.innerHTML = html;
 }
+
+// ---------------------------------------------------------------------
+// Utilitários de jogos como máscara de bits (dezena d = bit d-1). Contar
+// acertos vira um AND + contagem de bits, o que deixa o gerador e o teste
+// no histórico rápidos o bastante pra rodar no navegador.
+// ---------------------------------------------------------------------
+const TODAS_DEZENAS = Array.from({ length: 25 }, (_, i) => i + 1);
+
+function mascaraDe(dezenas) {
+  return dezenas.reduce((m, d) => m | (1 << (d - 1)), 0);
+}
+
+function dezenasDaMascara(mascara) {
+  return TODAS_DEZENAS.filter((d) => mascara & (1 << (d - 1)));
+}
+
+function contarBits(x) {
+  x = x - ((x >>> 1) & 0x55555555);
+  x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+  x = (x + (x >>> 4)) & 0x0f0f0f0f;
+  return Math.imul(x, 0x01010101) >>> 24;
+}
+
+// k itens distintos sorteados de "lista" (Fisher-Yates parcial)
+function sortearDe(lista, k) {
+  const copia = [...lista];
+  for (let i = 0; i < k; i++) {
+    const j = i + Math.floor(Math.random() * (copia.length - i));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia.slice(0, k);
+}
+
+function maiorSequencia(dezenas) {
+  let maior = 0;
+  let atual = 0;
+  for (const d of TODAS_DEZENAS) {
+    atual = dezenas.includes(d) ? atual + 1 : 0;
+    maior = Math.max(maior, atual);
+  }
+  return maior;
+}
+
+// ---------------------------------------------------------------------
+// Histórico completo (concurso + dezenas), carregado uma vez por sessão
+// ---------------------------------------------------------------------
+let _historicoCache = null;
+
+async function carregarHistoricoCompleto() {
+  if (_historicoCache) return _historicoCache;
+  const linhas = await buscarTodasAsLinhas(() =>
+    supabaseClient.from('concursos').select('concurso, dezenas').order('concurso', { ascending: true })
+  );
+  _historicoCache = linhas.map((l) => ({ concurso: l.concurso, mascara: mascaraDe(l.dezenas) }));
+  return _historicoCache;
+}
+
+// Estado "conhecido até a véspera" de cada concurso: último resultado,
+// dezenas que faltam no ciclo das 25, atraso de cada dezena e resultados
+// que já saíram. estados[i] = o que se sabia antes do concurso historico[i]
+// (estados[historico.length] = o que se sabe hoje, pro próximo concurso).
+function calcularEstados(historico) {
+  const TODAS = (1 << 25) - 1;
+  const estados = [];
+  let faltandoCiclo = TODAS;
+  const ultimoVisto = new Array(26).fill(-1);
+  for (let i = 0; i <= historico.length; i++) {
+    estados.push({
+      indice: i,
+      ultimo: i > 0 ? historico[i - 1].mascara : 0,
+      faltandoCiclo,
+      atraso: TODAS_DEZENAS.map((d) => i - 1 - ultimoVisto[d]), // atraso[d-1]
+    });
+    if (i < historico.length) {
+      faltandoCiclo &= ~historico[i].mascara;
+      if (faltandoCiclo === 0) faltandoCiclo = TODAS;
+      for (const d of dezenasDaMascara(historico[i].mascara)) ultimoVisto[d] = i;
+    }
+  }
+  return estados;
+}
+
+// ---------------------------------------------------------------------
+// Gerador por cobertura
+// ---------------------------------------------------------------------
+function lerPreferenciasCobertura() {
+  const num = (id) => parseInt(document.getElementById(id).value, 10);
+  const marcado = (id) => document.getElementById(id).checked;
+  return {
+    repetidas: marcado('cob-usar-repetidas') ? [num('cob-rep-min'), num('cob-rep-max')] : null,
+    pares: marcado('cob-usar-pares') ? [num('cob-pares-min'), num('cob-pares-max')] : null,
+    soma: marcado('cob-usar-soma') ? [num('cob-soma-min'), num('cob-soma-max')] : null,
+    cicloMin: marcado('cob-usar-ciclo') ? num('cob-ciclo-min') : null,
+    evitarPopulares: marcado('cob-evitar-populares'),
+  };
+}
+
+function padraoPopular(mascara, dezenas, estado, resultadosPassados) {
+  if (estado.ultimo && contarBits(mascara & estado.ultimo) >= 13) return true; // repete o último resultado
+  if (resultadosPassados && resultadosPassados.has(mascara)) return true; // resultado que já saiu
+  if (maiorSequencia(dezenas) >= 10) return true; // sequência longa (ex: 01 a 10)
+  let linhasCheias = 0;
+  let colunasCheias = 0;
+  for (let k = 0; k < 5; k++) {
+    if ([1, 2, 3, 4, 5].every((c) => dezenas.includes(k * 5 + c))) linhasCheias++;
+    if ([0, 1, 2, 3, 4].every((l) => dezenas.includes(l * 5 + k + 1))) colunasCheias++;
+  }
+  return linhasCheias >= 3 || colunasCheias >= 3; // desenho no volante
+}
+
+// Sorteia um jogo que respeite as preferências (ou null se não achar)
+function sortearCandidato(prefs, estado, resultadosPassados) {
+  const doUltimo = dezenasDaMascara(estado.ultimo);
+  const foraDoUltimo = TODAS_DEZENAS.filter((d) => !(estado.ultimo & (1 << (d - 1))));
+  for (let tentativa = 0; tentativa < 300; tentativa++) {
+    let dezenas;
+    if (prefs.repetidas && doUltimo.length === 15) {
+      const [min, max] = prefs.repetidas;
+      const r = Math.max(5, min) + Math.floor(Math.random() * (Math.min(15, max) - Math.max(5, min) + 1));
+      dezenas = [...sortearDe(doUltimo, r), ...sortearDe(foraDoUltimo, 15 - r)];
+    } else {
+      dezenas = sortearDe(TODAS_DEZENAS, 15);
+    }
+    dezenas.sort((a, b) => a - b);
+    const mascara = mascaraDe(dezenas);
+
+    if (prefs.pares) {
+      const pares = dezenas.filter((d) => d % 2 === 0).length;
+      if (pares < prefs.pares[0] || pares > prefs.pares[1]) continue;
+    }
+    if (prefs.soma) {
+      const soma = dezenas.reduce((a, b) => a + b, 0);
+      if (soma < prefs.soma[0] || soma > prefs.soma[1]) continue;
+    }
+    if (prefs.cicloMin && contarBits(mascara & estado.faltandoCiclo) < Math.min(prefs.cicloMin, contarBits(estado.faltandoCiclo))) continue;
+    if (prefs.evitarPopulares && padraoPopular(mascara, dezenas, estado, resultadosPassados)) continue;
+    return mascara;
+  }
+  return null;
+}
+
+// Monta "qtd" jogos um a um: pra cada vaga, sorteia vários candidatos e fica
+// com o que menos se sobrepõe aos jogos já escolhidos (soma dos quadrados das
+// dezenas em comum). Isso espalha as dezenas e reduz jogos parecidos.
+function gerarJogosCobertura(qtd, prefs, estado, resultadosPassados, candidatosPorJogo = 1500) {
+  const jogos = [];
+  for (let n = 0; n < qtd; n++) {
+    let melhor = null;
+    let melhorCusto = Infinity;
+    for (let c = 0; c < candidatosPorJogo; c++) {
+      const cand = sortearCandidato(prefs, estado, resultadosPassados);
+      if (cand === null || jogos.includes(cand)) continue;
+      let custo = 0;
+      for (const j of jogos) {
+        const comum = contarBits(cand & j);
+        custo += comum * comum;
+      }
+      if (custo < melhorCusto) {
+        melhorCusto = custo;
+        melhor = cand;
+        if (jogos.length === 0) break; // primeiro jogo: qualquer candidato serve
+      }
+    }
+    if (melhor === null) break;
+    jogos.push(melhor);
+  }
+  return jogos;
+}
+
+// Simula muitos sorteios e mede a chance de pelo menos um jogo do conjunto
+// fazer 11+ e 13+ pontos
+function simularChances(jogos, sorteios) {
+  let pelo11 = 0;
+  let pelo13 = 0;
+  for (const s of sorteios) {
+    let maior = 0;
+    for (const j of jogos) {
+      const a = contarBits(j & s);
+      if (a > maior) maior = a;
+    }
+    if (maior >= 11) pelo11++;
+    if (maior >= 13) pelo13++;
+  }
+  return { pelo11: pelo11 / sorteios.length, pelo13: pelo13 / sorteios.length };
+}
+
+function sobreposicoes(jogos) {
+  let maior = 0;
+  let soma = 0;
+  let pares = 0;
+  for (let i = 0; i < jogos.length; i++) {
+    for (let k = i + 1; k < jogos.length; k++) {
+      const c = contarBits(jogos[i] & jogos[k]);
+      maior = Math.max(maior, c);
+      soma += c;
+      pares++;
+    }
+  }
+  return { maior, media: pares ? soma / pares : 0 };
+}
+
+let _ultimosJogosCobertura = [];
+
+document.getElementById('btn-gerar-cobertura').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-gerar-cobertura');
+  const statusEl = document.getElementById('cob-status');
+  const resultadoEl = document.getElementById('cob-resultado');
+  const qtd = Math.min(50, Math.max(1, parseInt(document.getElementById('cob-qtd').value, 10) || 10));
+  const prefs = lerPreferenciasCobertura();
+
+  btn.disabled = true;
+  resultadoEl.innerHTML = '';
+  statusEl.innerHTML = '<span class="carregando">Carregando o histórico e gerando…</span>';
+
+  try {
+    const historico = await carregarHistoricoCompleto();
+    const estados = calcularEstados(historico);
+    const estadoHoje = estados[historico.length];
+    const resultadosPassados = new Set(historico.map((h) => h.mascara));
+
+    // deixa a tela atualizar antes do cálculo pesado
+    await new Promise((r) => setTimeout(r, 30));
+    const jogos = gerarJogosCobertura(qtd, prefs, estadoHoje, resultadosPassados);
+    if (jogos.length === 0) {
+      statusEl.innerHTML = '<span class="msg-erro">Nenhum jogo atende a todas as preferências juntas. Afrouxe alguma faixa e tente de novo.</span>';
+      return;
+    }
+
+    // comparação justa: mesmos sorteios simulados pro conjunto gerado e pra
+    // conjuntos do mesmo tamanho montados ao acaso
+    const sorteiosSimulados = Array.from({ length: 20000 }, () => mascaraDe(sortearDe(TODAS_DEZENAS, 15)));
+    const chances = simularChances(jogos, sorteiosSimulados);
+    let acaso11 = 0;
+    let acaso13 = 0;
+    const RODADAS_ACASO = 5;
+    for (let r = 0; r < RODADAS_ACASO; r++) {
+      const aleatorios = Array.from({ length: jogos.length }, () => mascaraDe(sortearDe(TODAS_DEZENAS, 15)));
+      const c = simularChances(aleatorios, sorteiosSimulados);
+      acaso11 += c.pelo11 / RODADAS_ACASO;
+      acaso13 += c.pelo13 / RODADAS_ACASO;
+    }
+
+    _ultimosJogosCobertura = jogos.map((m) => dezenasDaMascara(m));
+    const sobre = sobreposicoes(jogos);
+    const uso = TODAS_DEZENAS.map((d) => _ultimosJogosCobertura.filter((j) => j.includes(d)).length);
+    const pct = (x) => `${(100 * x).toFixed(1).replace('.', ',')}%`;
+
+    statusEl.innerHTML = `<span class="msg-ok">${jogos.length} jogo(s) gerado(s)${jogos.length < qtd ? ` (você pediu ${qtd}; as preferências não permitiram mais jogos diferentes)` : ''}.</span>`;
+
+    let html = `
+      <div class="painel-chances">
+        <div>Chance de pelo menos 1 jogo com 11+ pontos<strong>${pct(chances.pelo11)}</strong>com ${jogos.length} jogo(s) ao acaso: ${pct(acaso11)}</div>
+        <div>Chance de pelo menos 1 jogo com 13+ pontos<strong>${pct(chances.pelo13)}</strong>com ${jogos.length} jogo(s) ao acaso: ${pct(acaso13)}</div>
+        <div>Dezenas em comum entre 2 jogos<strong>${sobre.media.toFixed(1).replace('.', ',')} em média</strong>no máximo ${sobre.maior} (ao acaso: 9 em média)</div>
+      </div>
+      <p style="font-size:12px; color:#888; margin:0 0 6px;">Chances estimadas simulando 20.000 sorteios. Cada jogo, sozinho, continua com 1 em 11 de fazer 11+ pontos.</p>
+      <div style="font-size:13px;"><strong>Quantas vezes cada dezena aparece nos jogos:</strong></div>
+      <div class="uso-dezenas">${TODAS_DEZENAS.map((d, i) => `<span>${String(d).padStart(2, '0')}: ${uso[i]}x</span>`).join('')}</div>
+      <table class="tabela-metricas" style="width:auto;">
+        <thead><tr><th>#</th><th>Dezenas</th><th>Repetidas</th><th>Pares</th><th>Soma</th><th>Faltam no ciclo</th></tr></thead>
+        <tbody>`;
+    _ultimosJogosCobertura.forEach((dezenas, i) => {
+      const m = jogos[i];
+      html += `<tr>
+        <td>${i + 1}</td>
+        <td>${chipsDezenasEmFileiras(dezenas)}</td>
+        <td>${contarBits(m & estadoHoje.ultimo)}</td>
+        <td>${dezenas.filter((d) => d % 2 === 0).length}</td>
+        <td>${dezenas.reduce((a, b) => a + b, 0)}</td>
+        <td>${contarBits(m & estadoHoje.faltandoCiclo)}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>
+      <div class="linha-form" style="margin-top:12px;">
+        <button class="acao secundario" id="btn-cob-copiar">Copiar todos</button>
+        <button class="acao" id="btn-cob-cadastrar">Cadastrar todos em Meus jogos</button>
+        <span id="cob-cadastro-status"></span>
+      </div>`;
+    resultadoEl.innerHTML = html;
+
+    document.getElementById('btn-cob-copiar').addEventListener('click', async (ev) => {
+      const texto = _ultimosJogosCobertura.map((j) => j.map((d) => String(d).padStart(2, '0')).join('\t')).join('\n');
+      await navigator.clipboard.writeText(texto);
+      ev.currentTarget.textContent = 'Copiado ✓';
+    });
+
+    document.getElementById('btn-cob-cadastrar').addEventListener('click', async (ev) => {
+      const botao = ev.currentTarget;
+      const st = document.getElementById('cob-cadastro-status');
+      botao.disabled = true;
+      const concursoAlvo = await obterProximoConcurso();
+      const hoje = new Date().toLocaleDateString('pt-BR');
+      const linhas = _ultimosJogosCobertura.map((dezenas, i) => ({
+        nome: `Cobertura ${hoje} #${i + 1}`,
+        dezenas,
+        concurso_alvo: concursoAlvo,
+        origem: 'gerado',
+      }));
+      const { error } = await supabaseClient.from('meus_jogos').insert(linhas);
+      if (error) {
+        st.innerHTML = `<span class="msg-erro">Erro ao cadastrar: ${escaparHtml(error.message)}</span>`;
+        botao.disabled = false;
+        return;
+      }
+      st.innerHTML = `<span class="msg-ok">${linhas.length} jogo(s) cadastrado(s) para o concurso ${concursoAlvo ?? '—'}.</span>`;
+      carregarMeusJogos();
+    });
+  } catch (e) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro: ${escaparHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------------------------------------------------------------------
+// Testar estratégia no histórico (backtest)
+// ---------------------------------------------------------------------
+const ESTRATEGIAS_TESTE = {
+  cobertura: {
+    nome: 'Gerador por cobertura',
+    gerar: (qtd, estado, ctx) => gerarJogosCobertura(qtd, ctx.prefs, estado, ctx.resultadosPassados, 300),
+  },
+  repetidas_ciclo: {
+    nome: '9 repetidas + ausentes do ciclo + atrasadas',
+    gerar: (qtd, estado) => {
+      const doUltimo = dezenasDaMascara(estado.ultimo);
+      const ausentes = TODAS_DEZENAS.filter((d) => !(estado.ultimo & (1 << (d - 1))));
+      return Array.from({ length: qtd }, () => {
+        const prioridade = ausentes
+          .map((d) => ({ d, falta: (estado.faltandoCiclo >> (d - 1)) & 1, atraso: estado.atraso[d - 1], sorte: Math.random() }))
+          .sort((a, b) => b.falta - a.falta || b.atraso - a.atraso || b.sorte - a.sorte)
+          .slice(0, 6)
+          .map((x) => x.d);
+        return mascaraDe([...sortearDe(doUltimo, 9), ...prioridade]);
+      });
+    },
+  },
+  quentes: {
+    nome: 'Mais quentes (últimos 20)',
+    gerar: (qtd, estado, ctx) => {
+      const janela = ctx.historico.slice(Math.max(0, estado.indice - 20), estado.indice);
+      const top = TODAS_DEZENAS.map((d) => ({ d, f: janela.filter((h) => h.mascara & (1 << (d - 1))).length, sorte: Math.random() }))
+        .sort((a, b) => b.f - a.f || b.sorte - a.sorte)
+        .slice(0, 18)
+        .map((x) => x.d);
+      return Array.from({ length: qtd }, () => mascaraDe(sortearDe(top, 15)));
+    },
+  },
+  atrasadas: {
+    nome: '15 mais atrasadas',
+    gerar: (qtd, estado) =>
+      Array.from({ length: qtd }, () =>
+        mascaraDe(
+          TODAS_DEZENAS.map((d) => ({ d, atraso: estado.atraso[d - 1], sorte: Math.random() }))
+            .sort((a, b) => b.atraso - a.atraso || b.sorte - a.sorte)
+            .slice(0, 15)
+            .map((x) => x.d)
+        )
+      ),
+  },
+  aleatorio: {
+    nome: 'Totalmente aleatório',
+    gerar: (qtd) => Array.from({ length: qtd }, () => mascaraDe(sortearDe(TODAS_DEZENAS, 15))),
+  },
+};
+
+// chance teórica de k acertos pra qualquer jogo de 15 dezenas
+function combinacoes(n, k) {
+  let r = 1;
+  for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i;
+  return r;
+}
+const CHANCE_TEORICA = Array.from({ length: 16 }, (_, k) => (combinacoes(15, k) * combinacoes(10, 15 - k)) / combinacoes(25, 15));
+
+document.getElementById('btn-rodar-teste').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-rodar-teste');
+  const statusEl = document.getElementById('bt-status');
+  const resultadoEl = document.getElementById('bt-resultado');
+  const escolhidas = [...document.querySelectorAll('#bt-estrategias input:checked')].map((i) => i.value);
+  const jogosPorConcurso = Math.min(30, Math.max(1, parseInt(document.getElementById('bt-jogos').value, 10) || 10));
+
+  if (escolhidas.length === 0) {
+    statusEl.innerHTML = '<span class="msg-erro">Escolha pelo menos uma estratégia.</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  resultadoEl.innerHTML = '';
+  statusEl.innerHTML = '<span class="carregando">Carregando o histórico…</span>';
+
+  try {
+    const historico = await carregarHistoricoCompleto();
+    const estados = calcularEstados(historico);
+    const ultimos = Math.min(historico.length - 1, Math.max(50, parseInt(document.getElementById('bt-ultimos').value, 10) || 500));
+    const inicio = historico.length - ultimos;
+    const ctx = { historico, prefs: lerPreferenciasCobertura(), resultadosPassados: new Set() };
+    for (let i = 0; i < inicio; i++) ctx.resultadosPassados.add(historico[i].mascara);
+
+    const placar = {};
+    escolhidas.forEach((k) => (placar[k] = { acertos: new Array(16).fill(0), concursosPremiados: 0 }));
+
+    for (let i = inicio; i < historico.length; i++) {
+      const estado = estados[i];
+      const sorteado = historico[i].mascara;
+      for (const chave of escolhidas) {
+        const jogos = ESTRATEGIAS_TESTE[chave].gerar(jogosPorConcurso, estado, ctx);
+        let premiou = false;
+        for (const j of jogos) {
+          const a = contarBits(j & sorteado);
+          placar[chave].acertos[a]++;
+          if (a >= 11) premiou = true;
+        }
+        if (premiou) placar[chave].concursosPremiados++;
+      }
+      ctx.resultadosPassados.add(sorteado);
+
+      // a cada 25 concursos, devolve o controle pra tela não travar
+      if ((i - inicio) % 25 === 0) {
+        statusEl.innerHTML = `<span class="carregando">Testando… concurso ${historico[i].concurso} (${i - inicio + 1} de ${ultimos})</span>`;
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+
+    const fmt = (x, casas) => (100 * x).toFixed(casas).replace('.', ',') + '%';
+    const acimaDe = (lista, k) => lista.slice(k).reduce((a, b) => a + b, 0);
+    const mediaTeorica = CHANCE_TEORICA.reduce((s, p, k) => s + k * p, 0);
+    const premiadoAcaso = 1 - Math.pow(1 - acimaDe(CHANCE_TEORICA, 11), jogosPorConcurso);
+
+    let html = `<table class="tabela-backtest">
+      <thead><tr><th>Estratégia</th><th>Concursos com<br />algum jogo 11+</th><th>Média de<br />pontos</th><th>11+</th><th>12+</th><th>13+</th><th>14+</th><th>15</th></tr></thead>
+      <tbody>
+        <tr class="linha-teoria"><td>Teoria (qualquer jogo)</td><td>${fmt(premiadoAcaso, 1)}*</td>
+          <td>${mediaTeorica.toFixed(3).replace('.', ',')}</td>
+          <td>${fmt(acimaDe(CHANCE_TEORICA, 11), 2)}</td><td>${fmt(acimaDe(CHANCE_TEORICA, 12), 2)}</td>
+          <td>${fmt(acimaDe(CHANCE_TEORICA, 13), 3)}</td><td>${fmt(acimaDe(CHANCE_TEORICA, 14), 4)}</td><td>—</td></tr>`;
+    escolhidas.forEach((chave) => {
+      const { acertos, concursosPremiados } = placar[chave];
+      const total = acertos.reduce((a, b) => a + b, 0);
+      const media = acertos.reduce((s, v, k) => s + k * v, 0) / total;
+      html += `<tr><td>${ESTRATEGIAS_TESTE[chave].nome}</td><td><strong>${fmt(concursosPremiados / ultimos, 1)}</strong></td>
+        <td>${media.toFixed(3).replace('.', ',')}</td>
+        <td>${fmt(acimaDe(acertos, 11) / total, 2)}</td><td>${fmt(acimaDe(acertos, 12) / total, 2)}</td>
+        <td>${fmt(acimaDe(acertos, 13) / total, 3)}</td><td>${fmt(acimaDe(acertos, 14) / total, 4)}</td>
+        <td>${acertos[15]}</td></tr>`;
+    });
+    html += `</tbody></table>
+      <p style="font-size:12px; color:#666;">
+        * Com ${jogosPorConcurso} jogos independentes entre si. A média de pontos e as colunas 11+ a 15 são
+        por jogo e ficam iguais à teoria em qualquer estratégia; o que muda de uma pra outra é a chance de
+        <strong>pelo menos um</strong> dos jogos do concurso premiar, que cai quando os jogos são parecidos
+        entre si (acertam e erram juntos) e sobe quando eles se complementam.
+      </p>
+      <p style="font-size:12px; color:#666;">
+        ${ultimos} concursos × ${jogosPorConcurso} jogos = ${ultimos * jogosPorConcurso} jogos por estratégia.
+        Diferenças de poucos décimos entre as estratégias são variação normal do acaso; uma estratégia só
+        estaria funcionando se ficasse claramente acima da linha "Teoria" de forma consistente, rodando o
+        teste várias vezes e em períodos diferentes.
+      </p>`;
+    resultadoEl.innerHTML = html;
+    statusEl.innerHTML = '<span class="msg-ok">Teste concluído.</span>';
+  } catch (e) {
+    statusEl.innerHTML = `<span class="msg-erro">Erro: ${escaparHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ---------------------------------------------------------------------
 // Login — o painel só aparece (e só busca dados) com usuário logado
