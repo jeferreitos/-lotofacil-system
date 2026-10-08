@@ -55,12 +55,19 @@ Mesmo que alguém consiga criar conta, sem estar em `usuarios_autorizados` não 
 
 ## Importação automática
 
-Edge Functions:
-- `importar-concursos` (código em `supabase/functions/`) — chamada pelo GitHub Actions.
-- `swift-action` — chamada pelo botão "Atualizar resultados" do painel.
+Uma Edge Function só, código em `supabase/functions/swift-action/index.ts`
+(baixado do Supabase em 08/10/2026). No painel do Supabase ela aparece com o
+nome **importar-concursos**, mas o endereço dela é `/functions/v1/swift-action`.
+Ela atende os dois endereços:
+- `/importar-concursos` — chamado pelo GitHub Actions (cron).
+- `/swift-action` — chamado pelo botão "Atualizar resultados" do painel.
+
+Busca os resultados na API comunitária `loteriascaixa-api.herokuapp.com`,
+grava com a chave de serviço (não depende do login) e recalcula os ciclos.
+`{"backfill": true}` no corpo importa o histórico inteiro de novo.
 
 ```bash
-supabase functions deploy importar-concursos --no-verify-jwt
+supabase functions deploy swift-action --no-verify-jwt
 ```
 
 Secrets do repositório (Settings → Secrets and variables → Actions):
