@@ -90,7 +90,7 @@
     border: 1px solid var(--vermelho);
   }
 
-  input[type="number"], input[type="text"], input[type="date"], select {
+  input[type="number"], input[type="text"], input[type="date"], input[type="email"], input[type="password"], select {
     padding: 6px 8px;
     border: 1px solid var(--cinza-borda);
     border-radius: 6px;
@@ -205,16 +205,46 @@
   }
   .tabela-ifj-detalhe { margin-top: 8px; font-size: 12px; }
   .tabela-ifj-detalhe th, .tabela-ifj-detalhe td { padding: 3px 6px; }
+
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .header-usuario { margin-left: auto; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .header-usuario button { background: none; border: 1px solid #fff; color: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+
+  #tela-login { max-width: 360px; margin: 40px auto; padding: 0 16px; }
+  #tela-login .cartao { display: flex; flex-direction: column; gap: 10px; }
+  #tela-login input { width: 100%; }
+  .oculto { display: none !important; }
+
+  .dezena-acerto { background: var(--verde); color: #fff; border-color: var(--verde); }
+  .badge-premio { background: var(--verde); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
+  .resumo-conferencia { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; margin: 6px 0 10px; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Lotofácil — Painel</h1>
-  <p>Ciclos, geração de jogos, meus jogos e conferência automática.</p>
+  <div>
+    <h1>Lotofácil — Painel</h1>
+    <p>Ciclos, geração de jogos, meus jogos e conferência automática.</p>
+  </div>
+  <div class="header-usuario oculto" id="header-usuario">
+    <span id="usuario-email"></span>
+    <button id="btn-sair">Sair</button>
+  </div>
 </header>
 
-<nav>
+<!-- ===================== LOGIN ===================== -->
+<section id="tela-login" class="oculto">
+  <form class="cartao" id="form-login">
+    <h2>Entrar</h2>
+    <input type="email" id="login-email" placeholder="E-mail" autocomplete="username" required />
+    <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password" required />
+    <button type="submit" class="acao" id="btn-entrar">Entrar</button>
+    <div id="login-status"></div>
+  </form>
+</section>
+
+<nav id="nav-abas" class="oculto">
   <button data-aba="ciclos" class="ativo">Ciclos</button>
   <button data-aba="gerar">Gerar jogos</button>
   <button data-aba="meus-jogos">Meus jogos</button>
@@ -222,7 +252,7 @@
   <button data-aba="analise">Análise</button>
 </nav>
 
-<main>
+<main id="painel" class="oculto">
 
   <!-- ===================== CICLOS ===================== -->
   <section id="aba-ciclos" class="aba ativa">
@@ -566,11 +596,14 @@ document.getElementById('btn-atualizar-concursos').addEventListener('click', asy
   statusEl.innerHTML = '<span class="carregando">Buscando resultado mais recente…</span>';
 
   try {
+    // manda o token do usuário logado (não a chave pública) pra function
+    const { data: sessaoAtual } = await supabaseClient.auth.getSession();
+    const token = sessaoAtual.session?.access_token ?? SUPABASE_ANON_KEY;
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/swift-action`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Authorization: `Bearer ${token}`,
         apikey: SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({ backfill: false }),
@@ -646,6 +679,11 @@ document.getElementById('btn-salvar-concurso-manual').addEventListener('click', 
   document.getElementById('manual-concurso').value = '';
   document.getElementById('manual-data').value = '';
   document.getElementById('manual-dezenas').value = '';
+
+  // a importação automática já recalcula os ciclos; o lançamento manual
+  // precisa pedir, senão a "Duração média dos ciclos" fica desatualizada
+  const { error: erroCiclos } = await supabaseClient.rpc('recalcular_ciclos');
+  if (erroCiclos) console.warn('Não consegui recalcular os ciclos:', erroCiclos.message);
 
   recarregarDependentesDeConcursos();
 });
@@ -860,7 +898,6 @@ function atualizarSugestaoConcursoAlvo() {
     if (prox) document.getElementById('novo-jogo-concurso-alvo').placeholder = `Concurso alvo (sugestão: ${prox})`;
   });
 }
-atualizarSugestaoConcursoAlvo();
 
 let _faixasCache = null;
 async function obterFaixasAceitaveis() {
@@ -1483,28 +1520,85 @@ async function carregarConferencia() {
     statusEl.className = 'msg-erro';
     return;
   }
-  statusEl.textContent = '';
   _ultimaConferenciaCarregada = data ?? [];
+
+  // dezenas sorteadas de cada concurso conferido, pra destacar os acertos
+  _dezenasSorteadasPorConcurso = {};
+  const concursos = [...new Set(_ultimaConferenciaCarregada.map((l) => l.concurso))];
+  try {
+    for (let i = 0; i < concursos.length; i += 200) {
+      const { data: sorteados, error: erroSorteados } = await supabaseClient
+        .from('concursos')
+        .select('concurso, dezenas')
+        .in('concurso', concursos.slice(i, i + 200));
+      if (erroSorteados) throw erroSorteados;
+      (sorteados ?? []).forEach((c) => (_dezenasSorteadasPorConcurso[c.concurso] = new Set(c.dezenas)));
+    }
+  } catch (e) {
+    console.warn('Não consegui buscar as dezenas sorteadas:', e.message);
+  }
+
+  statusEl.textContent = '';
   aplicarFiltroConferencia();
 }
 
-// Detecta automaticamente qual coluna representa o concurso (procura por
-// "concurso" no nome da coluna) e filtra por ela — assim não depende de
-// eu saber o nome exato da coluna na view "painel_conferencias".
+let _dezenasSorteadasPorConcurso = {};
+
 function aplicarFiltroConferencia() {
   const tabelaEl = document.getElementById('conferencia-tabela');
   const valorFiltro = document.getElementById('filtro-concurso-conferencia').value.trim();
 
   let linhas = _ultimaConferenciaCarregada;
-
-  if (valorFiltro && linhas.length > 0) {
-    const chaveConcurso = Object.keys(linhas[0]).find((k) => k.toLowerCase().includes('concurso'));
-    if (chaveConcurso) {
-      linhas = linhas.filter((l) => String(l[chaveConcurso]) === valorFiltro);
-    }
+  if (valorFiltro) {
+    linhas = linhas.filter((l) => String(l.concurso) === valorFiltro);
   }
 
-  tabelaEl.innerHTML = montarTabelaGenerica(linhas);
+  if (linhas.length === 0) {
+    tabelaEl.innerHTML = '<p style="color:#888;">Nenhuma conferência encontrada.</p>';
+    return;
+  }
+
+  const premiadas = linhas.filter((l) => l.premiado);
+  const porFaixa = {};
+  premiadas.forEach((l) => (porFaixa[l.faixa] = (porFaixa[l.faixa] || 0) + 1));
+  const faixasTexto = Object.keys(porFaixa)
+    .sort()
+    .reverse()
+    .map((f) => `${escaparHtml(f)}: ${porFaixa[f]}`)
+    .join(' · ');
+
+  let html = `<div class="resumo-conferencia">
+    <span><strong>${linhas.length}</strong> conferência(s)</span>
+    <span><strong>${premiadas.length}</strong> premiada(s)${faixasTexto ? ` (${faixasTexto})` : ''}</span>
+  </div>`;
+
+  html += `<div style="overflow-x:auto;"><table>
+    <thead><tr><th>Concurso</th><th>Data</th><th>Jogo</th><th>Dezenas (verde = acertou)</th><th>Acertos</th><th>Prêmio</th></tr></thead>
+    <tbody>`;
+
+  linhas.forEach((l) => {
+    const sorteadas = _dezenasSorteadasPorConcurso[l.concurso];
+    const dezenas = [...(l.dezenas ?? [])].sort((a, b) => a - b);
+    const chips = dezenas
+      .map((d) => {
+        const acertou = sorteadas && sorteadas.has(d);
+        return `<span class="dezenas-chip${acertou ? ' dezena-acerto' : ''}">${String(d).padStart(2, '0')}</span>`;
+      })
+      .join(' ');
+    const dataBr = l.data_sorteio ? l.data_sorteio.split('-').reverse().join('/') : '—';
+
+    html += `<tr>
+      <td>${l.concurso}</td>
+      <td>${dataBr}</td>
+      <td>${escaparHtml(l.nome ?? '—')}</td>
+      <td>${chips}</td>
+      <td><strong>${l.acertos}</strong></td>
+      <td>${l.premiado ? `<span class="badge-premio">${escaparHtml(l.faixa)}</span>` : '<span style="color:#bbb;">—</span>'}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  tabelaEl.innerHTML = html;
 }
 
 document.getElementById('filtro-concurso-conferencia').addEventListener('input', aplicarFiltroConferencia);
@@ -1692,15 +1786,66 @@ async function carregarMatrizAtraso() {
 }
 
 // ---------------------------------------------------------------------
-// Carga inicial
+// Login — o painel só aparece (e só busca dados) com usuário logado
 // ---------------------------------------------------------------------
-carregarCiclos();
-carregarDuracaoCiclos();
-carregarMeusJogos();
-carregarConferencia();
-carregarAnalise();
-carregarMatrizAtraso();
-popularSelectConcursosComparar();
+let _painelIniciado = false;
+
+function iniciarPainel() {
+  if (_painelIniciado) return;
+  _painelIniciado = true;
+  atualizarSugestaoConcursoAlvo();
+  carregarCiclos();
+  carregarDuracaoCiclos();
+  carregarMeusJogos();
+  carregarConferencia();
+  carregarAnalise();
+  carregarMatrizAtraso();
+  popularSelectConcursosComparar();
+}
+
+function mostrarTelaConforme(sessao) {
+  const logado = !!sessao;
+  document.getElementById('tela-login').classList.toggle('oculto', logado);
+  document.getElementById('nav-abas').classList.toggle('oculto', !logado);
+  document.getElementById('painel').classList.toggle('oculto', !logado);
+  document.getElementById('header-usuario').classList.toggle('oculto', !logado);
+  document.getElementById('usuario-email').textContent = sessao?.user?.email ?? '';
+  if (logado) iniciarPainel();
+}
+
+document.getElementById('form-login').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const statusEl = document.getElementById('login-status');
+  const btn = document.getElementById('btn-entrar');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span class="carregando">Entrando…</span>';
+
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email: document.getElementById('login-email').value.trim(),
+    password: document.getElementById('login-senha').value,
+  });
+
+  btn.disabled = false;
+  if (error) {
+    statusEl.innerHTML = '<span class="msg-erro">E-mail ou senha inválidos.</span>';
+    return;
+  }
+  statusEl.innerHTML = '';
+  document.getElementById('login-senha').value = '';
+});
+
+document.getElementById('btn-sair').addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  // recarrega pra limpar da tela os dados do painel
+  location.reload();
+});
+
+// setTimeout: a supabase-js recomenda não chamar o próprio cliente direto
+// de dentro do onAuthStateChange (pode travar)
+supabaseClient.auth.onAuthStateChange((_evento, sessao) => {
+  setTimeout(() => mostrarTelaConforme(sessao), 0);
+});
+supabaseClient.auth.getSession().then(({ data }) => mostrarTelaConforme(data.session));
 </script>
 
 </body>
