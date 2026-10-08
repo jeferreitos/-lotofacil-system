@@ -19,10 +19,8 @@ jobs:
         # function responde com erro, em vez de passar verde silenciosamente.
         # O backfill vai na URL (?backfill=) e no corpo, pra funcionar com a
         # versão antiga e a nova da function.
-        # No Supabase a function aparece com o nome "importar-concursos", mas
-        # o endereço (slug) dela é "swift-action".
         run: |
-          curl -sS --fail-with-body -w "\nHTTP_STATUS:%{http_code}\n" -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/swift-action?backfill=${{ github.event.inputs.backfill || 'false' }}" \
+          curl -sS --fail-with-body -w "\nHTTP_STATUS:%{http_code}\n" -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/importar-concursos?backfill=${{ github.event.inputs.backfill || 'false' }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{\"backfill\": ${{ github.event.inputs.backfill || 'false' }}}"
