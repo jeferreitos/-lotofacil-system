@@ -615,7 +615,13 @@ document.getElementById('btn-atualizar-concursos').addEventListener('click', asy
       throw new Error(json.error || `Erro HTTP ${resp.status}`);
     }
 
-    statusEl.innerHTML = `<span class="msg-ok">Concurso mais recente sincronizado.</span>`;
+    const qtd = json.importados ?? 0;
+    const lista = Array.isArray(json.concursos_importados) ? json.concursos_importados.join(', ') : '';
+    statusEl.innerHTML = !json.ok
+      ? '<span class="msg-ok">Concurso mais recente sincronizado.</span>' // versão antiga da function
+      : qtd > 0
+        ? `<span class="msg-ok">${qtd} concurso(s) novo(s) importado(s)${lista ? `: ${lista}` : ''}.</span>`
+        : `<span class="msg-ok">Já estava tudo em dia${json.ultimo_disponivel ? ` (último concurso: ${json.ultimo_disponivel})` : ''}.</span>`;
     recarregarDependentesDeConcursos();
   } catch (e) {
     statusEl.innerHTML = `<span class="msg-erro">Erro ao atualizar: ${e.message}</span>`;

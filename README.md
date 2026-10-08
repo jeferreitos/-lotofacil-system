@@ -39,6 +39,7 @@ Rode nesta ordem no SQL Editor do Supabase (ou `supabase db push`):
 | `0005_estado_atual_painel.sql` | gerador IFJ, métricas, crivo e views criados direto no painel (retrato de 08/10/2026) |
 | `0006_conferencia_validacao_ciclo25.sql` | validação de dezenas, conferência de jogo cadastrado depois do sorteio, distribuição histórica sempre atualizada, ciclo das 25 dezenas |
 | `0007_login_rls.sql` | acesso só com login de usuário autorizado |
+| `0008_limpeza_sobras.sql` | remove sobras de versões antigas do gerador |
 
 ## Acesso (login)
 
@@ -62,9 +63,12 @@ Ela atende os dois endereços:
 - `/importar-concursos` — chamado pelo GitHub Actions (cron).
 - `/swift-action` — chamado pelo botão "Atualizar resultados" do painel.
 
-Busca os resultados na API comunitária `loteriascaixa-api.herokuapp.com`,
-grava com a chave de serviço (não depende do login) e recalcula os ciclos.
-`{"backfill": true}` no corpo importa o histórico inteiro de novo.
+Busca os resultados na API oficial da Caixa e, se ela falhar, no mirror
+comunitário `loteriascaixa-api.herokuapp.com`. Numa execução normal importa
+o que falta nos últimos 30 concursos e depois do último salvo; com
+`{"backfill": true}` no corpo preenche todos os buracos do histórico. Concurso
+já salvo não é baixado de novo. Grava com a chave de serviço (não depende do
+login), recalcula os ciclos e responde quantos concursos salvou de fato.
 
 ```bash
 supabase functions deploy swift-action --no-verify-jwt
@@ -85,10 +89,7 @@ function der erro, o job fica vermelho no GitHub.
 - Jogo cadastrado para um concurso que já saiu → conferido na hora.
 - Dezenas fora de 1–25 ou repetidas são recusadas.
 
-## Sobras antigas no banco (não usadas pelo painel)
+## Sobras antigas
 
-Funções `gerar_jogo`, `gerar_jogo_interno`, `gerar_jogos_v1_backup`, `sortear_dezenas_ponderado`,
-`faixa_aceitavel(text)`, `ciclo_hazard`, `atualizar_ciclo_estado_hist`; tabelas
-`ciclo_estado_hist`, `gerador_config`, `v_ultimo`; views `ciclo_duracao_dist`,
-`ciclo_duracao_stats`, `crivo_distribuicao`, `dezena_peso_ciclo`, `dezena_peso_janela20`,
-`dezena_peso_final`. Podem ser removidas numa limpeza futura.
+A migration `0008_limpeza_sobras.sql` remove funções, tabelas e views de versões
+antigas do gerador que o painel não usa mais.
