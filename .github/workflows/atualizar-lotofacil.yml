@@ -15,8 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Disparar Edge Function
+        # --fail-with-body faz o job ficar vermelho (e mostrar o erro) quando a
+        # function responde com erro, em vez de passar verde silenciosamente.
+        # O backfill vai na URL (?backfill=) e no corpo, pra funcionar com a
+        # versão antiga e a nova da function.
         run: |
-          curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/importar-concursos" \
+          curl -sS --fail-with-body -w "\nHTTP_STATUS:%{http_code}\n" -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/importar-concursos?backfill=${{ github.event.inputs.backfill || 'false' }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{\"backfill\": ${{ github.event.inputs.backfill || 'false' }}}"

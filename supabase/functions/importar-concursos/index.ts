@@ -76,8 +76,17 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // backfill pode vir na URL (?backfill=true) ou no corpo JSON ({"backfill": true})
   const url = new URL(req.url);
-  const backfill = url.searchParams.get("backfill") === "true";
+  let backfill = url.searchParams.get("backfill") === "true";
+  if (!backfill && req.method === "POST") {
+    try {
+      const corpo = await req.json();
+      backfill = corpo?.backfill === true || corpo?.backfill === "true";
+    } catch {
+      // corpo vazio ou não-JSON: segue sem backfill
+    }
+  }
 
   try {
     // 1) descobre o concurso mais recente disponível na Caixa
@@ -90,8 +99,19 @@ Deno.serve(async (req) => {
 
     if (backfill) {
       // descobre quais concursos já existem no banco pra não buscar de novo
-      const { data: existentes } = await supabase.from("concursos").select("concurso");
-      const jaTemos = new Set((existentes ?? []).map((r) => r.concurso));
+      // (paginado: o Supabase devolve no máximo 1000 linhas por consulta)
+      const jaTemos = new Set<number>();
+      const PAGINA = 1000;
+      for (let inicio = 0; ; inicio += PAGINA) {
+        const { data: pagina, error } = await supabase
+          .from("concursos")
+          .select("concurso")
+          .order("concurso")
+          .range(inicio, inicio + PAGINA - 1);
+        if (error) throw error;
+        (pagina ?? []).forEach((r) => jaTemos.add(r.concurso));
+        if (!pagina || pagina.length < PAGINA) break;
+      }
 
       numerosParaBuscar = [];
       for (let n = 1; n <= ultimoCaixa.concurso; n++) {
@@ -131,7 +151,8 @@ Deno.serve(async (req) => {
     }
 
     // recalcula os ciclos depois de importar
-    await supabase.rpc("recalcular_ciclos");
+    const { error: erroCiclos } = await supabase.rpc("recalcular_ciclos");
+    if (erroCiclos) throw erroCiclos;
 
     return new Response(
       JSON.stringify({

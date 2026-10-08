@@ -418,6 +418,36 @@ document.querySelectorAll('nav button').forEach((btn) => {
 });
 
 // ---------------------------------------------------------------------
+// Utilitário: escapa texto livre (ex: nome do jogo) antes de colocar no
+// HTML, pra um nome como "<script>" aparecer como texto e não rodar.
+// ---------------------------------------------------------------------
+function escaparHtml(texto) {
+  return String(texto ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ---------------------------------------------------------------------
+// Utilitário: busca todas as linhas de uma consulta, de 1000 em 1000
+// (o Supabase devolve no máximo 1000 linhas por requisição).
+// "montarConsulta" recebe nada e devolve a query já com select/order.
+// ---------------------------------------------------------------------
+async function buscarTodasAsLinhas(montarConsulta) {
+  const PAGINA = 1000;
+  const todas = [];
+  for (let inicio = 0; ; inicio += PAGINA) {
+    const { data, error } = await montarConsulta().range(inicio, inicio + PAGINA - 1);
+    if (error) throw error;
+    todas.push(...(data ?? []));
+    if (!data || data.length < PAGINA) break;
+  }
+  return todas;
+}
+
+// ---------------------------------------------------------------------
 // Utilitário: monta uma tabela HTML genérica a partir de um array de
 // objetos, sem precisar saber de antemão quais colunas existem.
 // ---------------------------------------------------------------------
@@ -437,6 +467,8 @@ function montarTabelaGenerica(linhas) {
         valor = valor.map((d) => `<span class="dezenas-chip">${String(d).padStart(2, '0')}</span>`).join(' ');
       } else if (valor === null || valor === undefined) {
         valor = '<span style="color:#bbb;">—</span>';
+      } else {
+        valor = escaparHtml(valor);
       }
       html += `<td>${valor}</td>`;
     });
@@ -448,7 +480,7 @@ function montarTabelaGenerica(linhas) {
 
 function badgeStatus(status) {
   const classe = status === 'ativo' ? 'badge-ativo' : status === 'jogado' ? 'badge-jogado' : 'badge-outro';
-  return `<span class="badge-status ${classe}">${status ?? '—'}</span>`;
+  return `<span class="badge-status ${classe}">${escaparHtml(status ?? '—')}</span>`;
 }
 
 function chipsDezenas(lista) {
@@ -511,6 +543,10 @@ async function obterProximoConcurso() {
 // Recarrega tudo que depende da tabela "concursos".
 // ---------------------------------------------------------------------
 function recarregarDependentesDeConcursos() {
+  // entrou concurso novo: o "próximo concurso" muda, então descarta o cache
+  _proximoConcursoCache = null;
+  atualizarSugestaoConcursoAlvo();
+  popularSelectConcursosComparar();
   carregarCiclos();
   carregarDuracaoCiclos();
   carregarConferencia();
@@ -782,14 +818,31 @@ document.getElementById('btn-cadastrar-jogo').addEventListener('click', async ()
     .map((d) => parseInt(d.trim(), 10))
     .filter((d) => !isNaN(d));
 
-  if (dezenas.length !== 15) {
-    statusEl.innerHTML = `<span class="msg-erro">A Lotofácil precisa de exatamente 15 dezenas (você digitou ${dezenas.length}).</span>`;
+  const dezenasUnicas = [...new Set(dezenas)];
+
+  if (dezenas.length !== 15 || dezenasUnicas.length !== 15) {
+    statusEl.innerHTML = `<span class="msg-erro">A Lotofácil precisa de exatamente 15 dezenas sem repetição (você digitou ${dezenas.length}, sendo ${dezenasUnicas.length} única(s)).</span>`;
+    return;
+  }
+  if (dezenas.some((d) => d < 1 || d > 25)) {
+    statusEl.innerHTML = '<span class="msg-erro">As dezenas precisam estar entre 1 e 25.</span>';
     return;
   }
 
-  const concursoAlvo = concursoAlvoTexto ? parseInt(concursoAlvoTexto, 10) : await obterProximoConcurso();
+  let concursoAlvo;
+  if (concursoAlvoTexto) {
+    concursoAlvo = parseInt(concursoAlvoTexto, 10);
+    if (isNaN(concursoAlvo) || concursoAlvo <= 0) {
+      statusEl.innerHTML = '<span class="msg-erro">Concurso alvo inválido.</span>';
+      return;
+    }
+  } else {
+    concursoAlvo = await obterProximoConcurso();
+  }
 
-  const { error } = await supabaseClient.from('meus_jogos').insert({ nome, dezenas, concurso_alvo: concursoAlvo });
+  const dezenasOrdenadas = dezenasUnicas.sort((a, b) => a - b);
+
+  const { error } = await supabaseClient.from('meus_jogos').insert({ nome, dezenas: dezenasOrdenadas, concurso_alvo: concursoAlvo });
   if (error) {
     statusEl.innerHTML = `<span class="msg-erro">Erro: ${error.message}</span>`;
   } else {
@@ -802,9 +855,12 @@ document.getElementById('btn-cadastrar-jogo').addEventListener('click', async ()
 
 // Pré-preenche o campo "Concurso alvo" com o próximo concurso assim que a
 // página carrega, pra não ter que digitar toda vez (ainda editável).
-obterProximoConcurso().then((prox) => {
-  if (prox) document.getElementById('novo-jogo-concurso-alvo').placeholder = `Concurso alvo (sugestão: ${prox})`;
-});
+function atualizarSugestaoConcursoAlvo() {
+  obterProximoConcurso().then((prox) => {
+    if (prox) document.getElementById('novo-jogo-concurso-alvo').placeholder = `Concurso alvo (sugestão: ${prox})`;
+  });
+}
+atualizarSugestaoConcursoAlvo();
 
 let _faixasCache = null;
 async function obterFaixasAceitaveis() {
@@ -991,7 +1047,7 @@ function renderAlertaMetricasRaras(distMap, jogosMetricas) {
       <div class="titulo">⚠ ${alertas.length} jogo(s) com valores raros no histórico</div>
       <div class="corpo">
         <ul>
-          ${alertas.map((a) => `<li><strong>${a.nome}</strong>: ${a.metricasRaras.join(', ')}</li>`).join('')}
+          ${alertas.map((a) => `<li><strong>${escaparHtml(a.nome)}</strong>:${a.metricasRaras.join(', ')}</li>`).join('')}
         </ul>
       </div>
     </div>`;
@@ -1053,17 +1109,24 @@ async function carregarGradeHistorica(jogosMetricas) {
 // ---------------------------------------------------------------------
 async function popularSelectConcursosComparar() {
   const sel = document.getElementById('select-concurso-comparar');
-  const { data, error } = await supabaseClient
-    .from('concursos')
-    .select('concurso')
-    .order('concurso', { ascending: false });
-  if (error || !data) return;
+  let data;
+  try {
+    data = await buscarTodasAsLinhas(() =>
+      supabaseClient.from('concursos').select('concurso').order('concurso', { ascending: false })
+    );
+  } catch (e) {
+    return;
+  }
+  // recria a lista mantendo a opção "Nenhum" e o concurso que estava escolhido
+  const escolhido = sel.value;
+  sel.querySelectorAll('option:not([value=""])').forEach((opt) => opt.remove());
   data.forEach((c) => {
     const opt = document.createElement('option');
     opt.value = c.concurso;
     opt.textContent = `Concurso ${c.concurso}`;
     sel.appendChild(opt);
   });
+  sel.value = escolhido;
 }
 
 document.getElementById('select-concurso-comparar').addEventListener('change', async (ev) => {
@@ -1121,6 +1184,8 @@ document.getElementById('select-concurso-comparar').addEventListener('change', a
 });
 
 let _ultimosJogosCarregados = [];
+// jogos que estão aparecendo na tabela (respeita o filtro por concurso alvo)
+let _jogosVisiveis = [];
 let _jogosSelecionados = new Set();
 let _distMapTabelaCache = null;
 let _faixasTabelaCache = {};
@@ -1128,10 +1193,19 @@ let _faixasTabelaCache = {};
 async function carregarMeusJogos() {
   const statusEl = document.getElementById('meus-jogos-status');
 
-  const { data, error } = await supabaseClient
-    .from('meus_jogos_metricas')
-    .select('*')
-    .order('criado_em', { ascending: true });
+  let data = null;
+  let error = null;
+  try {
+    data = await buscarTodasAsLinhas(() =>
+      supabaseClient
+        .from('meus_jogos_metricas')
+        .select('*')
+        .order('criado_em', { ascending: true })
+        .order('id', { ascending: true })
+    );
+  } catch (e) {
+    error = e;
+  }
 
   if (error) {
     statusEl.textContent = 'Erro ao carregar: ' + error.message;
@@ -1184,6 +1258,7 @@ function aplicarFiltroConcursoAlvo() {
     }
   }
 
+  _jogosVisiveis = lista;
   renderizarTabelaMeusJogos(lista);
 }
 
@@ -1235,7 +1310,7 @@ function renderizarTabelaMeusJogos(data) {
     html += `<tr data-id="${jogo.id}">
       <td><input type="checkbox" class="chk-jogo" data-id="${jogo.id}" /></td>
       <td>${indice + 1}</td>
-      <td>${jogo.nome ?? '—'}</td>
+      <td>${escaparHtml(jogo.nome ?? '—')}</td>
       <td>${badgeStatus(jogo.status)}</td>
       <td>${valorAlvo ?? '—'}</td>
       <td>${chipsDezenasEmFileiras(dezenasOrdenadas)}</td>
@@ -1253,7 +1328,7 @@ function renderizarTabelaMeusJogos(data) {
       ${celulaMetricaRara(jogo.linha4, 'linha4')}
       ${celulaMetricaRara(jogo.linha5, 'linha5')}
       <td><button class="acao secundario copiar-dezenas" data-dezenas="${dezenasFormatadas}">Copiar</button></td>
-      <td><button class="acao perigo excluir-jogo" data-id="${jogo.id}" data-nome="${jogo.nome ?? 'este jogo'}">Excluir</button></td>
+      <td><button class="acao perigo excluir-jogo" data-id="${jogo.id}" data-nome="${escaparHtml(jogo.nome ?? 'este jogo')}">Excluir</button></td>
     </tr>`;
   });
 
@@ -1368,11 +1443,11 @@ document.getElementById('btn-excluir-selecionados').addEventListener('click', as
 
 document.getElementById('btn-copiar-todos').addEventListener('click', async (ev) => {
   const btn = ev.currentTarget;
-  if (!_ultimosJogosCarregados || _ultimosJogosCarregados.length === 0) {
-    alert('Não há jogos cadastrados para copiar.');
+  if (!_jogosVisiveis || _jogosVisiveis.length === 0) {
+    alert('Não há jogos na lista para copiar.');
     return;
   }
-  const texto = _ultimosJogosCarregados
+  const texto = _jogosVisiveis
     .map((jogo) => [...jogo.dezenas].sort((a, b) => a - b).map((d) => String(d).padStart(2, '0')).join('\t'))
     .join('\n');
 
@@ -1389,7 +1464,20 @@ let _ultimaConferenciaCarregada = [];
 
 async function carregarConferencia() {
   const statusEl = document.getElementById('conferencia-status');
-  const { data, error } = await supabaseClient.from('painel_conferencias').select('*');
+  let data = null;
+  let error = null;
+  try {
+    data = await buscarTodasAsLinhas(() =>
+      supabaseClient
+        .from('painel_conferencias')
+        .select('*')
+        .order('concurso', { ascending: false })
+        .order('acertos', { ascending: false })
+        .order('jogo_id', { ascending: true })
+    );
+  } catch (e) {
+    error = e;
+  }
   if (error) {
     statusEl.textContent = 'Erro ao carregar: ' + error.message;
     statusEl.className = 'msg-erro';
