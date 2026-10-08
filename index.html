@@ -219,6 +219,25 @@
   .badge-premio { background: var(--verde); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
   .resumo-conferencia { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; margin: 6px 0 10px; }
 
+  .tabela-metodos { width: auto; margin-bottom: 10px; }
+  .tabela-metodos td { vertical-align: middle; font-size: 14px; }
+  .tabela-metodos input[type="number"] { width: 70px; }
+  .ajuda {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; margin-left: 6px; border-radius: 50%;
+    background: var(--roxo); color: #fff; font-size: 12px; font-weight: bold; cursor: help;
+  }
+  .ajuda-texto {
+    display: none; position: absolute; left: 24px; top: -6px; z-index: 20; width: 300px;
+    background: #fff; color: #222; border: 1px solid var(--cinza-borda); border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.15); padding: 10px 12px;
+    font-size: 12px; font-weight: normal; line-height: 1.45; text-align: left;
+  }
+  .ajuda:hover .ajuda-texto, .ajuda:focus .ajuda-texto { display: block; }
+  /* tela estreita: o balão vira um quadro fixo no rodapé da tela */
+  @media (max-width: 600px) { .ajuda-texto { position: fixed; left: 16px; right: 16px; bottom: 16px; top: auto; width: auto; } }
+  .badge-metodo { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; background: #f3e5f5; color: var(--roxo-escuro); white-space: nowrap; }
+
   .preferencias-cobertura { margin: 4px 0 12px; font-size: 13px; }
   .preferencias-cobertura summary { cursor: pointer; font-weight: bold; margin-bottom: 8px; }
   .preferencias-cobertura .linha-form { margin-bottom: 6px; }
@@ -321,21 +340,49 @@
   <!-- ===================== GERAR JOGOS ===================== -->
   <section id="aba-gerar" class="aba">
     <div class="cartao">
-      <h2>Gerar jogos — cobertura</h2>
+      <h2>Gerar jogos</h2>
       <p style="font-size:12px; color:#666; margin-top:-6px;">
         Todo jogo de 15 dezenas tem a mesma chance de premiar (11 pontos: 1 em 11; 15 pontos:
-        1 em 3.268.760), não importa como foi montado. O que este gerador faz é montar o
-        <strong>conjunto</strong> de jogos com as dezenas bem distribuídas e pouca repetição entre
-        eles, o que aumenta a chance de <strong>pelo menos um</strong> jogo premiar, e evitar
-        padrões que muita gente joga (prêmios de 14 e 15 pontos são divididos entre os ganhadores).
+        1 em 3.268.760), não importa o método. O que muda entre os métodos é o quanto os jogos se
+        parecem entre si: jogos parecidos acertam e erram juntos. Escolha os métodos e quantos
+        jogos de cada um; passe o mouse no <strong>?</strong> pra ver como cada método funciona.
       </p>
+      <table class="tabela-metodos">
+        <thead><tr><th>Método</th><th>Jogos</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><label><input type="checkbox" class="metodo-marcado" data-metodo="cobertura" checked /> Cobertura</label>
+              <span class="ajuda" tabindex="0">?<span class="ajuda-texto">Monta os jogos pra se completarem: espalha as 25 dezenas entre eles e evita jogos parecidos. Não muda a chance de cada jogo, mas aumenta a chance de <strong>pelo menos um</strong> premiar. Usa as preferências opcionais abaixo e evita padrões populares. Se você marcar outros métodos junto, os jogos de cobertura são montados pra completar os jogos dos outros métodos.<br /><em>No histórico (lotes de 10 jogos): 75,5% dos concursos com algum jogo de 11+.</em></span></span></td>
+            <td><input type="number" class="metodo-qtd" data-metodo="cobertura" value="10" min="1" max="50" /></td>
+          </tr>
+          <tr>
+            <td><label><input type="checkbox" class="metodo-marcado" data-metodo="repetidas_ciclo" /> 9 repetidas + ciclo + atrasadas</label>
+              <span class="ajuda" tabindex="0">?<span class="ajuda-texto">Pega 9 dezenas do último concurso (escolhidas ao acaso) e completa com 6 das que não saíram, dando prioridade às que faltam no ciclo das 25 e depois às mais atrasadas. Como essas 6 tendem a ser as mesmas em todos os jogos, os jogos ficam parecidos entre si.<br /><em>No histórico (lotes de 10 jogos): 57,0% dos concursos com algum jogo de 11+.</em></span></span></td>
+            <td><input type="number" class="metodo-qtd" data-metodo="repetidas_ciclo" value="2" min="1" max="50" /></td>
+          </tr>
+          <tr>
+            <td><label><input type="checkbox" class="metodo-marcado" data-metodo="quentes" /> Mais quentes</label>
+              <span class="ajuda" tabindex="0">?<span class="ajuda-texto">Escolhe 15 entre as 18 dezenas que mais saíram nos últimos 20 concursos. Os jogos ficam muito parecidos entre si (só 3 dezenas variam).<br /><em>No histórico (lotes de 10 jogos): 36,6% dos concursos com algum jogo de 11+.</em></span></span></td>
+            <td><input type="number" class="metodo-qtd" data-metodo="quentes" value="2" min="1" max="50" /></td>
+          </tr>
+          <tr>
+            <td><label><input type="checkbox" class="metodo-marcado" data-metodo="atrasadas" /> 15 mais atrasadas</label>
+              <span class="ajuda" tabindex="0">?<span class="ajuda-texto">As 15 dezenas que estão há mais concursos sem sair. Como a lista é quase fixa, só existem poucos jogos diferentes (a variação vem de dezenas empatadas no atraso) e eles são muito parecidos entre si; repetidos são descartados.<br /><em>No histórico (lotes de 10 jogos): 44,0% dos concursos com algum jogo de 11+.</em></span></span></td>
+            <td><input type="number" class="metodo-qtd" data-metodo="atrasadas" value="1" min="1" max="50" /></td>
+          </tr>
+          <tr>
+            <td><label><input type="checkbox" class="metodo-marcado" data-metodo="ifj" /> IFJ (aderência ao histórico)</label>
+              <span class="ajuda" tabindex="0">?<span class="ajuda-texto">O gerador antigo: sorteia milhares de jogos e fica com os de nota alta de semelhança com o histórico (soma, pares, repetidas, primos, moldura, Fibonacci e mágicos), separados em categorias de nota (Aderência máxima, alta, média e Cobertura). A nota mede semelhança com o histórico, não chance de ganhar. Pode devolver menos jogos que o pedido.</span></span></td>
+            <td><input type="number" class="metodo-qtd" data-metodo="ifj" value="2" min="1" max="50" /></td>
+          </tr>
+        </tbody>
+      </table>
       <div class="linha-form">
-        <label for="cob-qtd">Quantidade de jogos:</label>
-        <input type="number" id="cob-qtd" value="10" min="1" max="50" style="width:70px" />
         <button class="acao" id="btn-gerar-cobertura">Gerar</button>
+        <span id="metodos-total" style="font-size:13px; color:#666;"></span>
       </div>
       <details class="preferencias-cobertura">
-        <summary>Preferências opcionais <span style="color:#888; font-weight:normal;">(filtram o perfil dos jogos, mas não mudam a chance de cada um)</span></summary>
+        <summary>Preferências opcionais do método Cobertura <span style="color:#888; font-weight:normal;">(filtram o perfil dos jogos, mas não mudam a chance de cada um)</span></summary>
         <div class="linha-form">
           <label><input type="checkbox" id="cob-usar-repetidas" checked /> Repetidas do último concurso entre</label>
           <input type="number" id="cob-rep-min" value="8" min="5" max="15" style="width:60px" /> e
@@ -2033,23 +2080,25 @@ function sortearCandidato(prefs, estado, resultadosPassados) {
 // Monta "qtd" jogos um a um: pra cada vaga, sorteia vários candidatos e fica
 // com o que menos se sobrepõe aos jogos já escolhidos (soma dos quadrados das
 // dezenas em comum). Isso espalha as dezenas e reduz jogos parecidos.
-function gerarJogosCobertura(qtd, prefs, estado, resultadosPassados, candidatosPorJogo = 1500) {
+// "preexistentes" são jogos de outros métodos que a cobertura deve completar.
+function gerarJogosCobertura(qtd, prefs, estado, resultadosPassados, candidatosPorJogo = 1500, preexistentes = []) {
   const jogos = [];
   for (let n = 0; n < qtd; n++) {
+    const jaEscolhidos = [...preexistentes, ...jogos];
     let melhor = null;
     let melhorCusto = Infinity;
     for (let c = 0; c < candidatosPorJogo; c++) {
       const cand = sortearCandidato(prefs, estado, resultadosPassados);
-      if (cand === null || jogos.includes(cand)) continue;
+      if (cand === null || jaEscolhidos.includes(cand)) continue;
       let custo = 0;
-      for (const j of jogos) {
+      for (const j of jaEscolhidos) {
         const comum = contarBits(cand & j);
         custo += comum * comum;
       }
       if (custo < melhorCusto) {
         melhorCusto = custo;
         melhor = cand;
-        if (jogos.length === 0) break; // primeiro jogo: qualquer candidato serve
+        if (jaEscolhidos.length === 0) break; // primeiro jogo: qualquer candidato serve
       }
     }
     if (melhor === null) break;
@@ -2090,14 +2139,46 @@ function sobreposicoes(jogos) {
   return { maior, media: pares ? soma / pares : 0 };
 }
 
-let _ultimosJogosCobertura = [];
+// Métodos do gerador: nome no rótulo e na tela
+const METODOS_GERADOR = {
+  cobertura: 'Cobertura',
+  repetidas_ciclo: 'Repetidas + ciclo',
+  quentes: 'Quentes',
+  atrasadas: 'Atrasadas',
+  ifj: 'IFJ',
+};
+
+function lerMetodosEscolhidos() {
+  const escolhidos = {};
+  document.querySelectorAll('.metodo-marcado:checked').forEach((chk) => {
+    const metodo = chk.dataset.metodo;
+    const campo = document.querySelector(`.metodo-qtd[data-metodo="${metodo}"]`);
+    escolhidos[metodo] = Math.min(50, Math.max(1, parseInt(campo.value, 10) || 1));
+  });
+  return escolhidos;
+}
+
+function atualizarTotalMetodos() {
+  const total = Object.values(lerMetodosEscolhidos()).reduce((a, b) => a + b, 0);
+  document.getElementById('metodos-total').textContent = total ? `Total: ${total} jogo(s)` : 'Marque pelo menos um método.';
+}
+document.querySelectorAll('.metodo-marcado, .metodo-qtd').forEach((el) => el.addEventListener('input', atualizarTotalMetodos));
+atualizarTotalMetodos();
+
+// Cada jogo gerado: { mascara, metodo, rotulo } — rotulo é o nome no cadastro
+let _ultimosJogosGerados = [];
 
 document.getElementById('btn-gerar-cobertura').addEventListener('click', async () => {
   const btn = document.getElementById('btn-gerar-cobertura');
   const statusEl = document.getElementById('cob-status');
   const resultadoEl = document.getElementById('cob-resultado');
-  const qtd = Math.min(50, Math.max(1, parseInt(document.getElementById('cob-qtd').value, 10) || 10));
+  const escolhidos = lerMetodosEscolhidos();
   const prefs = lerPreferenciasCobertura();
+
+  if (Object.keys(escolhidos).length === 0) {
+    statusEl.innerHTML = '<span class="msg-erro">Marque pelo menos um método.</span>';
+    return;
+  }
 
   btn.disabled = true;
   resultadoEl.innerHTML = '';
@@ -2108,12 +2189,59 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
     const estados = calcularEstados(historico);
     const estadoHoje = estados[historico.length];
     const resultadosPassados = new Set(historico.map((h) => h.mascara));
+    const ctx = { historico, prefs, resultadosPassados };
+    const hoje = new Date().toLocaleDateString('pt-BR');
 
     // deixa a tela atualizar antes do cálculo pesado
     await new Promise((r) => setTimeout(r, 30));
-    const jogos = gerarJogosCobertura(qtd, prefs, estadoHoje, resultadosPassados);
+
+    const gerados = [];
+    const avisos = [];
+    const jaTem = (m) => gerados.some((g) => g.mascara === m);
+
+    // 1) IFJ (vem do banco)
+    if (escolhidos.ifj) {
+      const { data, error } = await supabaseClient.rpc('gerar_jogos', { p_qtd: escolhidos.ifj });
+      if (error) throw new Error(`IFJ: ${error.message}`);
+      (data ?? []).forEach((jogo) => {
+        const mascara = mascaraDe(jogo.dezenas);
+        if (jaTem(mascara)) return;
+        const r = CORES_CATEGORIA_IFJ[jogo.categoria]?.rotulo ?? jogo.categoria ?? '';
+        const categoria = r.charAt(0) + r.slice(1).toLowerCase();
+        gerados.push({ mascara, metodo: 'ifj', detalhe: `${categoria} · nota ${jogo.ifj_total}`, rotulo: `IFJ ${categoria} · nota ${jogo.ifj_total} · ${hoje}` });
+      });
+      const qtdIfj = gerados.filter((g) => g.metodo === 'ifj').length;
+      if (qtdIfj < escolhidos.ifj) avisos.push(`IFJ: pedidos ${escolhidos.ifj}, vieram ${qtdIfj} (não achou mais jogos diferentes com nota alta)`);
+    }
+
+    // 2) repetidas + ciclo, quentes e atrasadas: um jogo por vez, descartando repetidos
+    for (const metodo of ['repetidas_ciclo', 'quentes', 'atrasadas']) {
+      if (!escolhidos[metodo]) continue;
+      let conseguidos = 0;
+      for (let tentativa = 0; conseguidos < escolhidos[metodo] && tentativa < escolhidos[metodo] * 30; tentativa++) {
+        const [mascara] = ESTRATEGIAS_TESTE[metodo].gerar(1, estadoHoje, ctx);
+        if (jaTem(mascara)) continue;
+        conseguidos++;
+        gerados.push({ mascara, metodo, detalhe: '', rotulo: `${METODOS_GERADOR[metodo]} #${conseguidos} · ${hoje}` });
+      }
+      if (conseguidos < escolhidos[metodo]) {
+        avisos.push(`${METODOS_GERADOR[metodo]}: pedidos ${escolhidos[metodo]}, só existem ${conseguidos} jogo(s) diferente(s) por esse método hoje`);
+      }
+    }
+
+    // 3) cobertura por último, completando os jogos dos outros métodos
+    if (escolhidos.cobertura) {
+      const preexistentes = gerados.map((g) => g.mascara);
+      const novos = gerarJogosCobertura(escolhidos.cobertura, prefs, estadoHoje, resultadosPassados, 1500, preexistentes);
+      novos.forEach((mascara, i) => gerados.push({ mascara, metodo: 'cobertura', detalhe: '', rotulo: `Cobertura #${i + 1} · ${hoje}` }));
+      if (novos.length < escolhidos.cobertura) {
+        avisos.push(`Cobertura: pedidos ${escolhidos.cobertura}, vieram ${novos.length} (as preferências não permitiram mais jogos diferentes)`);
+      }
+    }
+
+    const jogos = gerados.map((g) => g.mascara);
     if (jogos.length === 0) {
-      statusEl.innerHTML = '<span class="msg-erro">Nenhum jogo atende a todas as preferências juntas. Afrouxe alguma faixa e tente de novo.</span>';
+      statusEl.innerHTML = '<span class="msg-erro">Nenhum jogo gerado. Se usou as preferências da Cobertura, afrouxe alguma faixa e tente de novo.</span>';
       return;
     }
 
@@ -2131,12 +2259,15 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
       acaso13 += c.pelo13 / RODADAS_ACASO;
     }
 
-    _ultimosJogosCobertura = jogos.map((m) => dezenasDaMascara(m));
+    _ultimosJogosGerados = gerados;
+    const listaDezenas = jogos.map((m) => dezenasDaMascara(m));
     const sobre = sobreposicoes(jogos);
-    const uso = TODAS_DEZENAS.map((d) => _ultimosJogosCobertura.filter((j) => j.includes(d)).length);
+    const uso = TODAS_DEZENAS.map((d) => listaDezenas.filter((j) => j.includes(d)).length);
     const pct = (x) => `${(100 * x).toFixed(1).replace('.', ',')}%`;
 
-    statusEl.innerHTML = `<span class="msg-ok">${jogos.length} jogo(s) gerado(s)${jogos.length < qtd ? ` (você pediu ${qtd}; as preferências não permitiram mais jogos diferentes)` : ''}.</span>`;
+    statusEl.innerHTML =
+      `<span class="msg-ok">${jogos.length} jogo(s) gerado(s).</span>` +
+      (avisos.length ? `<div class="msg-erro" style="margin-top:4px;">${avisos.map(escaparHtml).join('<br />')}</div>` : '');
 
     let html = `
       <div class="painel-chances">
@@ -2147,13 +2278,15 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
       <p style="font-size:12px; color:#888; margin:0 0 6px;">Chances estimadas simulando 20.000 sorteios. Cada jogo, sozinho, continua com 1 em 11 de fazer 11+ pontos.</p>
       <div style="font-size:13px;"><strong>Quantas vezes cada dezena aparece nos jogos:</strong></div>
       <div class="uso-dezenas">${TODAS_DEZENAS.map((d, i) => `<span>${String(d).padStart(2, '0')}: ${uso[i]}x</span>`).join('')}</div>
-      <table class="tabela-metricas" style="width:auto;">
-        <thead><tr><th>#</th><th>Dezenas</th><th>Repetidas</th><th>Pares</th><th>Soma</th><th>Faltam no ciclo</th></tr></thead>
+      <div style="overflow-x:auto;"><table class="tabela-metricas" style="width:auto;">
+        <thead><tr><th>#</th><th>Método</th><th>Dezenas</th><th>Repetidas</th><th>Pares</th><th>Soma</th><th>Faltam no ciclo</th></tr></thead>
         <tbody>`;
-    _ultimosJogosCobertura.forEach((dezenas, i) => {
+    listaDezenas.forEach((dezenas, i) => {
       const m = jogos[i];
+      const g = gerados[i];
       html += `<tr>
         <td>${i + 1}</td>
+        <td><span class="badge-metodo">${METODOS_GERADOR[g.metodo]}</span>${g.detalhe ? `<div style="font-size:11px; color:#666; margin-top:2px;">${escaparHtml(g.detalhe)}</div>` : ''}</td>
         <td>${chipsDezenasEmFileiras(dezenas)}</td>
         <td>${contarBits(m & estadoHoje.ultimo)}</td>
         <td>${dezenas.filter((d) => d % 2 === 0).length}</td>
@@ -2161,7 +2294,7 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
         <td>${contarBits(m & estadoHoje.faltandoCiclo)}</td>
       </tr>`;
     });
-    html += `</tbody></table>
+    html += `</tbody></table></div>
       <div class="linha-form" style="margin-top:12px;">
         <button class="acao secundario" id="btn-cob-copiar">Copiar todos</button>
         <button class="acao" id="btn-cob-cadastrar">Cadastrar todos em Meus jogos</button>
@@ -2170,7 +2303,7 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
     resultadoEl.innerHTML = html;
 
     document.getElementById('btn-cob-copiar').addEventListener('click', async (ev) => {
-      const texto = _ultimosJogosCobertura.map((j) => j.map((d) => String(d).padStart(2, '0')).join('\t')).join('\n');
+      const texto = listaDezenas.map((j) => j.map((d) => String(d).padStart(2, '0')).join('\t')).join('\n');
       await navigator.clipboard.writeText(texto);
       ev.currentTarget.textContent = 'Copiado ✓';
     });
@@ -2180,10 +2313,9 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
       const st = document.getElementById('cob-cadastro-status');
       botao.disabled = true;
       const concursoAlvo = await obterProximoConcurso();
-      const hoje = new Date().toLocaleDateString('pt-BR');
-      const linhas = _ultimosJogosCobertura.map((dezenas, i) => ({
-        nome: `Cobertura #${i + 1} · ${hoje}`,
-        dezenas,
+      const linhas = _ultimosJogosGerados.map((g) => ({
+        nome: g.rotulo,
+        dezenas: dezenasDaMascara(g.mascara),
         concurso_alvo: concursoAlvo,
         origem: 'gerado',
       }));
