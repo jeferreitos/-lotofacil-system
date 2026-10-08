@@ -925,9 +925,13 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
     btn.addEventListener('click', async () => {
       const dezenas = jogo.dezenas ?? jogo.numeros ?? jogo.jogo;
       const concursoAlvo = await obterProximoConcurso();
+      // rótulo do card (ex: "IFJ Aderência máxima · nota 99") vai junto pro nome do jogo
+      const rotulo = CORES_CATEGORIA_IFJ[jogo.categoria]?.rotulo ?? jogo.categoria ?? '';
+      const rotuloFormatado = rotulo.charAt(0) + rotulo.slice(1).toLowerCase();
+      const nome = `IFJ ${rotuloFormatado} · nota ${jogo.ifj_total ?? '—'} · ${new Date().toLocaleDateString('pt-BR')}`;
       const { error: erroInsert } = await supabaseClient
         .from('meus_jogos')
-        .insert({ nome: `Gerado ${new Date().toLocaleDateString('pt-BR')}`, dezenas, concurso_alvo: concursoAlvo });
+        .insert({ nome, dezenas, concurso_alvo: concursoAlvo, origem: 'gerado' });
       if (erroInsert) {
         alert('Erro ao cadastrar: ' + erroInsert.message);
       } else {
@@ -2179,7 +2183,7 @@ document.getElementById('btn-gerar-cobertura').addEventListener('click', async (
       const concursoAlvo = await obterProximoConcurso();
       const hoje = new Date().toLocaleDateString('pt-BR');
       const linhas = _ultimosJogosCobertura.map((dezenas, i) => ({
-        nome: `Cobertura ${hoje} #${i + 1}`,
+        nome: `Cobertura #${i + 1} · ${hoje}`,
         dezenas,
         concurso_alvo: concursoAlvo,
         origem: 'gerado',
